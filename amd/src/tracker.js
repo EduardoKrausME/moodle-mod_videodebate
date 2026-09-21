@@ -1,0 +1,399 @@
+// This file is part of Moodle - http://moodle.org/
+//
+// Moodle is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// Moodle is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
+
+/**
+ * tracker.js
+ *
+ * @package   mod_videodebate
+ * @copyright 2026 Eduardo Kraus {@link https://eduardokraus.com}
+ * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ */
+
+define(['core/ajax', 'core/str', 'core/notification'], function (Ajax, Str, Notification) {
+    class Html5Adapter {
+        constructor(el) {
+            this.el = el;
+        }
+
+        ready() {
+            return Promise.resolve();
+        }
+
+        getCurrentTime() {
+            return Promise.resolve(Number(this.el.currentTime || 0));
+        }
+
+        getDuration() {
+            return Promise.resolve(Number(this.el.duration || 0));
+        }
+
+        getPlaybackRate() {
+            return Promise.resolve(Number(this.el.playbackRate || 1));
+        }
+
+        seek(time) {
+            this.el.currentTime = Math.max(0, Number(time || 0));
+            return Promise.resolve();
+        }
+
+        isPlaying() {
+            return !this.el.paused && !this.el.ended;
+        }
+
+        onPlay(cb) {
+            this.el.addEventListener('play', cb);
+        }
+
+        onPause(cb) {
+            this.el.addEventListener('pause', cb);
+            this.el.addEventListener('ended', cb);
+        }
+    }
+
+    class YoutubeAdapter {
+        constructor(el) {
+            this.el = el;
+            this.player = null;
+            this.playing = false;
+        }
+
+        ready() {
+            return new Promise((resolve, reject) => {
+                const start = () => {
+                    try {
+                        this.player = new window.YT.Player(this.el, {
+                            videoId: this.el.dataset.videoid,
+                            playerVars: {rel: 0, playsinline: 1},
+                            events: {
+                                onReady: () => resolve(),
+                                onStateChange: (event) => {
+                                    const was = this.playing;
+                                    this.playing = event.data === window.YT.PlayerState.PLAYING;
+                                    if (this.playing && !was && this.playcb) {
+                                        this.playcb();
+                                    }
+                                    if (!this.playing && was && this.pausecb) {
+                                        this.pausecb();
+                                    }
+                                },
+                                onError: () => reject(new Error('YouTube player error'))
+                            }
+                        });
+                    } catch (e) {
+                        reject(e);
+                    }
+                };
+                if (window.YT && window.YT.Player) {
+                    start();
+                    return;
+                }
+                const old = window.onYouTubeIframeAPIReady;
+                window.onYouTubeIframeAPIReady = () => {
+                    if (typeof old === 'function') {
+                        old();
+                    }
+                    start();
+                };
+                if (!document.querySelector('script[data-videodebate-youtube]')) {
+                    const script = document.createElement('script');
+                    script.src = 'https://www.youtube.com/iframe_api';
+                    script.dataset.videodebateYoutube = '1';
+                    script.onerror = () => reject(new Error('YouTube API unavailable'));
+                    document.head.appendChild(script);
+                }
+            });
+        }
+
+        getCurrentTime() {
+            return Promise.resolve(Number(this.player.getCurrentTime() || 0));
+        }
+
+        getDuration() {
+            return Promise.resolve(Number(this.player.getDuration() || 0));
+        }
+
+        getPlaybackRate() {
+            return Promise.resolve(Number(this.player.getPlaybackRate() || 1));
+        }
+
+        seek(time) {
+            this.player.seekTo(Math.max(0, Number(time || 0)), true);
+            return Promise.resolve();
+        }
+
+        isPlaying() {
+            return this.playing;
+        }
+
+        onPlay(cb) {
+            this.playcb = cb;
+        }
+
+        onPause(cb) {
+            this.pausecb = cb;
+        }
+    }
+
+    class VimeoAdapter {
+        constructor(el) {
+            this.el = el;
+            this.player = null;
+            this.playing = false;
+        }
+
+        ready() {
+            return new Promise((resolve, reject) => {
+                const start = () => {
+                    try {
+                        this.player = new window.Vimeo.Player(this.el);
+                        this.player.ready().then(() => {
+                            this.player.on('play', () => {
+                                this.playing = true;
+                                if (this.playcb) {
+                                    this.playcb();
+                                }
+                            });
+                            this.player.on('pause', () => {
+                                this.playing = false;
+                                if (this.pausecb) {
+                                    this.pausecb();
+                                }
+                            });
+                            this.player.on('ended', () => {
+                                this.playing = false;
+                                if (this.pausecb) {
+                                    this.pausecb();
+                                }
+                            });
+                            resolve();
+                        }).catch(reject);
+                    } catch (e) {
+                        reject(e);
+                    }
+                };
+                if (window.Vimeo && window.Vimeo.Player) {
+                    start();
+                    return;
+                }
+                const existing = document.querySelector('script[data-videodebate-vimeo]');
+                if (existing) {
+                    existing.addEventListener('load', start, {once: true});
+                    existing.addEventListener('error', () => reject(new Error('Vimeo API unavailable')), {once: true});
+                    return;
+                }
+                const script = document.createElement('script');
+                script.src = 'https://player.vimeo.com/api/player.js';
+                script.dataset.videodebateVimeo = '1';
+                script.onload = start;
+                script.onerror = () => reject(new Error('Vimeo API unavailable'));
+                document.head.appendChild(script);
+            });
+        }
+
+        getCurrentTime() {
+            return this.player.getCurrentTime().then(Number);
+        }
+
+        getDuration() {
+            return this.player.getDuration().then(Number);
+        }
+
+        getPlaybackRate() {
+            return this.player.getPlaybackRate().then(Number).catch(() => 1);
+        }
+
+        seek(time) {
+            return this.player.setCurrentTime(Math.max(0, Number(time || 0))).then(() => undefined);
+        }
+
+        isPlaying() {
+            return this.playing;
+        }
+
+        onPlay(cb) {
+            this.playcb = cb;
+        }
+
+        onPause(cb) {
+            this.pausecb = cb;
+        }
+    }
+
+    class Tracker {
+        constructor(root, config) {
+            this.root = root;
+            this.config = config;
+            this.adapter = null;
+            this.last = null;
+            this.pendingStart = null;
+            this.pendingEnd = null;
+            this.segments = Array.isArray(config.segments) ? config.segments : [];
+            this.sending = false;
+            this.timer = null;
+        }
+
+        initialise() {
+            const el = document.getElementById('videodebate-player');
+            if (!el) {
+                return;
+            }
+            if (this.config.source === 'youtube') {
+                this.adapter = new YoutubeAdapter(el);
+            } else if (this.config.source === 'vimeo') {
+                this.adapter = new VimeoAdapter(el);
+            } else {
+                this.adapter = new Html5Adapter(el);
+            }
+            this.adapter.onPlay(() => this.start());
+            this.adapter.onPause(() => this.stop(true));
+            this.adapter.ready().then(() => {
+                window.modVideoDebatePlayer = {
+                    getCurrentTime: () => this.adapter.getCurrentTime(),
+                    getDuration: () => this.adapter.getDuration(),
+                    seek: (time) => this.adapter.seek(time)
+                };
+                if (this.config.resumeplayback && Number(this.config.lastposition || 0) > 1) {
+                    this.adapter.seek(Number(this.config.lastposition));
+                }
+                document.dispatchEvent(new CustomEvent('videodebate:playerready'));
+            }).catch((error) => Notification.exception(error));
+        }
+
+        start() {
+            if (this.timer) {
+                return;
+            }
+            this.adapter.getCurrentTime().then((time) => {
+                this.last = time;
+                this.pendingStart = time;
+                this.pendingEnd = time;
+            });
+            this.timer = window.setInterval(() => this.tick(), 1500);
+        }
+
+        stop(flush) {
+            if (this.timer) {
+                window.clearInterval(this.timer);
+                this.timer = null;
+            }
+            if (flush) {
+                this.flush();
+            }
+        }
+
+        tick() {
+            Promise.all([this.adapter.getCurrentTime(), this.adapter.getDuration(), this.adapter.getPlaybackRate()]).then((values) => {
+                const current = Number(values[0] || 0);
+                const rate = Math.max(0.25, Number(values[2] || 1));
+                if (this.last === null) {
+                    this.last = current;
+                    return;
+                }
+                const delta = current - this.last;
+                if (!this.config.allowseek && delta > Math.max(3.2, rate * 3.2) && !this.isWatched(current)) {
+                    const previous = this.last;
+                    this.adapter.seek(previous);
+                    this.message('seekblocked');
+                    return;
+                }
+                if (delta >= 0 && delta <= Math.max(3.2, rate * 3.2)) {
+                    if (this.pendingStart === null) {
+                        this.pendingStart = this.last;
+                    }
+                    this.pendingEnd = current;
+                } else {
+                    this.flush();
+                    this.pendingStart = current;
+                    this.pendingEnd = current;
+                }
+                this.last = current;
+                if (this.pendingStart !== null && this.pendingEnd - this.pendingStart >= 4) {
+                    this.flush();
+                }
+            }).catch(() => this.message('trackingerror'));
+        }
+
+        flush() {
+            if (this.sending || this.pendingStart === null || this.pendingEnd === null || this.pendingEnd <= this.pendingStart) {
+                return;
+            }
+            const start = this.pendingStart;
+            const end = this.pendingEnd;
+            this.pendingStart = this.last;
+            this.pendingEnd = this.last;
+            this.sending = true;
+            Promise.all([this.adapter.getCurrentTime(), this.adapter.getDuration(), this.adapter.getPlaybackRate()]).then((values) => {
+                return Ajax.call([{
+                    methodname: 'mod_videodebate_update_progress',
+                    args: {
+                        cmid: Number(this.config.cmid), currentposition: Number(values[0] || 0),
+                        duration: Number(values[1] || 0), segmentstart: Number(start), segmentend: Number(end),
+                        playbackrate: Number(values[2] || 1)
+                    }
+                }])[0];
+            }).then((response) => {
+                this.sending = false;
+                try {
+                    this.segments = JSON.parse(response.segments || '[]');
+                } catch (e) {
+                    this.segments = [];
+                }
+                const percent = Math.round(Number(response.percent || 0));
+                const text = this.root.querySelector('[data-region="percent"]');
+                const bar = this.root.querySelector('[data-region="progress-bar"]');
+                if (text) {
+                    text.textContent = percent + '%';
+                }
+                if (bar) {
+                    bar.style.width = percent + '%';
+                    if (bar.parentElement) {
+                        bar.parentElement.setAttribute('aria-valuenow', percent);
+                    }
+                }
+            }).catch(() => {
+                this.sending = false;
+                this.message('trackingerror');
+            });
+        }
+
+        isWatched(position) {
+            return this.segments.some((s) => position >= Number(s[0]) - 0.3 && position <= Number(s[1]) + 0.3);
+        }
+
+        message(key) {
+            Str.get_string(key, 'videodebate').then((value) => {
+                const el = this.root.querySelector('[data-region="tracking-message"]');
+                if (!el) {
+                    return;
+                }
+                el.textContent = value;
+                el.classList.remove('d-none');
+                window.setTimeout(() => el.classList.add('d-none'), 4000);
+            });
+        }
+    }
+
+    return {
+        init: function () {
+            document.querySelectorAll('[data-region="videodebate"]').forEach((root) => {
+                try {
+                    new Tracker(root, JSON.parse(root.dataset.config || '{}')).initialise();
+                } catch (error) {
+                    Notification.exception(error);
+                }
+            });
+        }
+    };
+});
