@@ -171,7 +171,7 @@ class debate_manager {
      * @return int Return value.
      */
     public static function save_post(\stdClass $activity, int $userid, int $groupid, int $parentid,
-                                     string    $positionkey, string $message, array $evidence): int {
+                                     string $positionkey, string $message, array $evidence): int {
         global $DB;
         $now = time();
         if ($parentid === 0 && self::get_initial_post($activity->id, $userid)) {

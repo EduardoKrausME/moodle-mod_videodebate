@@ -36,7 +36,7 @@ class tracking_manager {
      * @return \stdClass Return value.
      */
     public function update(\stdClass $activity, int $userid, float $current, float $duration,
-                           float     $start, float $end, float $rate): \stdClass {
+                           float $start, float $end, float $rate): \stdClass {
         global $DB;
         $duration = max(0, $duration);
         $current = min(max(0, $current), $duration ?: $current);
