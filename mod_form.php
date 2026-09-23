@@ -43,7 +43,7 @@ class mod_videodebate_mod_form extends moodleform_mod {
         $mform->addRule('name', null, 'required', null, 'client');
         $this->standard_intro_elements();
 
-        $mform->addElement('header', 'videoheader', get_string('videoheader', 'videodebate'));
+        $mform->addElement('html', '<h3>' . get_string('videoheader', 'videodebate') . '</h3>');
         $mform->addElement('select', 'videosource', get_string('videosource', 'videodebate'), [
             'upload' => get_string('sourceupload', 'videodebate'),
             'url' => get_string('sourceurl', 'videodebate'),
@@ -54,7 +54,7 @@ class mod_videodebate_mod_form extends moodleform_mod {
         $mform->setType('videosource', PARAM_ALPHA);
 
         $mform->addElement('filemanager', 'videofile', get_string('videofile', 'videodebate'), null, [
-            'subdirs' => 0, 'maxfiles' => 1, 'accepted_types' => ['video'],
+            'subdirs' => 0, 'accepted_types' => ['video'],
         ]);
         $mform->hideIf('videofile', 'videosource', 'neq', 'upload');
         $mform->addElement('text', 'videourl', get_string('videourl', 'videodebate'), ['size' => 80]);
@@ -66,7 +66,7 @@ class mod_videodebate_mod_form extends moodleform_mod {
         $mform->addElement('selectyesno', 'allowseek', get_string('allowseek', 'videodebate'));
         $mform->setDefault('allowseek', 0);
 
-        $mform->addElement('header', 'debateheader', get_string('debateheader', 'videodebate'));
+        $mform->addElement('html', '<h3>' . get_string('debateheader', 'videodebate') . '</h3>');
         $mform->addElement('textarea', 'question', get_string('debatequestion', 'videodebate'), ['rows' => 4, 'cols' => 80]);
         $mform->setType('question', PARAM_TEXT);
         $mform->addRule('question', null, 'required', null, 'client');
@@ -87,7 +87,7 @@ class mod_videodebate_mod_form extends moodleform_mod {
         $mform->setType('minevidence', PARAM_INT);
         $mform->setDefault('minevidence', 1);
 
-        $mform->addElement('header', 'gradingheader', get_string('gradingheader', 'videodebate'));
+        $mform->addElement('html', '<h3>' . get_string('gradingheader', 'videodebate') . '</h3>');
         $mform->addElement('text', 'grade', get_string('maximumgrade', 'videodebate'), ['size' => 6]);
         $mform->setType('grade', PARAM_FLOAT);
         $mform->setDefault('grade', 100);
@@ -98,7 +98,7 @@ class mod_videodebate_mod_form extends moodleform_mod {
             $mform->setDefault($name, $default);
         }
 
-        $mform->addElement('header', 'completionrules', get_string('completionrules', 'completion'));
+        $mform->addElement('html', '<h3>' . get_string('completionrules', 'videodebate') . '</h3>');
         $mform->addElement('text', 'completionpercent', get_string('completionpercent', 'videodebate'), ['size' => 5]);
         $mform->setType('completionpercent', PARAM_INT);
         $mform->setDefault('completionpercent', 80);
@@ -190,6 +190,15 @@ class mod_videodebate_mod_form extends moodleform_mod {
         $grade = (float)($data['grade'] ?? 0);
         if ($grade < 0 || $grade > 100) {
             $errors['grade'] = get_string('errorgrade', 'videodebate');
+        }
+        foreach (['videofile'] as $field) {
+            $draftid = (int)($data[$field] ?? 0);
+            if ($draftid > 0) {
+                $draftinfo = file_get_draft_area_info($draftid);
+                if ((int)$draftinfo['filecount'] > 1) {
+                    $errors[$field] = get_string('errormaxfiles', 'videodebate');
+                }
+            }
         }
         return $errors;
     }
