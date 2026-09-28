@@ -75,10 +75,21 @@ if ($form->is_cancelled()) {
     if ($existing) {
         $record->id = $existing->id;
         $DB->update_record('videodebate_grades', $record);
+        $gradeid = $existing->id;
     } else {
-        $DB->insert_record('videodebate_grades', $record);
+        $gradeid = $DB->insert_record('videodebate_grades', $record);
     }
     videodebate_update_grades($activity, $userid, false);
+
+    $event = mod_videodebate\event\grade_updated::create([
+        'objectid' => $gradeid,
+        'context' => $context,
+        'relateduserid' => $userid,
+        'other' => ['videodebateid' => (int)$activity->id],
+    ]);
+    $event->add_record_snapshot('videodebate', $activity);
+    $event->trigger();
+    mod_videodebate\notification_manager::notify_grade($activity, $cm, $USER, $user, $final);
     redirect(new moodle_url('/mod/videodebate/report.php', ['id' => $cm->id]), get_string('gradesaved', 'videodebate'));
 }
 

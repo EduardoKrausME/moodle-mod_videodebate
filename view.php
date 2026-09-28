@@ -5,14 +5,6 @@
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
-//
-// Moodle is distributed in the hope that it will be useful,
-// but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU General Public License for more details.
-//
-// You should have received a copy of the GNU General Public License
-// along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
  * Main student debate page.
@@ -30,6 +22,9 @@ require('../../config.php');
 
 $id = required_param('id', PARAM_INT);
 $replyto = optional_param('replyto', 0, PARAM_INT);
+$page = optional_param('page', 0, PARAM_INT);
+$perpage = 20;
+
 $cm = get_coursemodule_from_id('videodebate', $id, 0, false, MUST_EXIST);
 $course = $DB->get_record('course', ['id' => $cm->course], '*', MUST_EXIST);
 $activity = $DB->get_record('videodebate', ['id' => $cm->instance], '*', MUST_EXIST);
@@ -37,7 +32,7 @@ $context = context_module::instance($cm->id);
 require_login($course, true, $cm);
 require_capability('mod/videodebate:view', $context);
 
-$PAGE->set_url('/mod/videodebate/view.php', ['id' => $cm->id]);
+$PAGE->set_url('/mod/videodebate/view.php', ['id' => $cm->id, 'page' => $page]);
 $PAGE->set_context($context);
 $PAGE->set_title(format_string($activity->name));
 $PAGE->set_heading(format_string($course->fullname));
@@ -63,24 +58,36 @@ $groupid = $currentgroup ?: 0;
 $canparticipate = has_capability('mod/videodebate:participate', $context);
 $canreply = has_capability('mod/videodebate:reply', $context);
 $canviewall = has_capability('mod/videodebate:viewall', $context);
+$canmoderate = has_capability('mod/videodebate:moderate', $context);
 $showothers = $canviewall || !$activity->blinduntilpost || $initial;
 
 $parentid = 0;
 if ($replyto && $canreply && $showothers) {
-    $parent = $DB->get_record('videodebate_posts', ['id' => $replyto, 'videodebateid' => $activity->id], '*', MUST_EXIST);
+    $parent = $DB->get_record('videodebate_posts', [
+        'id' => $replyto,
+        'videodebateid' => $activity->id,
+    ], '*', MUST_EXIST);
+    if (!empty($parent->isreply) || (int)$parent->parentid !== 0) {
+        throw new moodle_exception('nestedreplynotallowed', 'videodebate');
+    }
+    if (!empty($parent->hidden) && !$canmoderate) {
+        throw new moodle_exception('replytargethidden', 'videodebate');
+    }
     $sameuser = (int)$parent->userid === (int)$USER->id;
     $cangroupreply = (int)$parent->groupid === 0
         || groups_is_member((int)$parent->groupid, $USER->id)
         || has_capability('moodle/site:accessallgroups', $context);
     if (!$sameuser && $cangroupreply) {
-        $parentid = $parent->id;
+        $parentid = (int)$parent->id;
         $groupid = (int)$parent->groupid;
     }
 }
 
 $form = null;
 if (($canparticipate && !$initial && !$parentid) || ($canreply && $parentid)) {
-    $assignedkey = (int)$activity->assignmentmode === 1 ? $manager::assigned_position($activity, $USER->id, $groupid) : '';
+    $assignedkey = (int)$activity->assignmentmode === 1
+        ? $manager::assigned_position($activity, $USER->id, $groupid)
+        : '';
     $form = new post_form(null, [
         'cmid' => $cm->id,
         'parentid' => $parentid,
@@ -94,47 +101,107 @@ if (($canparticipate && !$initial && !$parentid) || ($canreply && $parentid)) {
     } else if ($data = $form->get_data()) {
         require_sesskey();
         $evidence = $manager::parse_evidence_json((string)$data->evidencejson);
-        $manager::save_post($activity, $USER->id, $groupid, (int)$data->parentid,
-            (string)$data->positionkey, trim((string)$data->message), $evidence);
-        (new mod_videodebate\tracking_manager())->update_completion($activity, $USER->id,
-            (new mod_videodebate\tracking_manager())->is_complete($activity, $USER->id));
+        $manager::save_post(
+            $activity,
+            $USER->id,
+            $groupid,
+            $parentid,
+            (string)$data->positionkey,
+            trim((string)$data->message),
+            $evidence
+        );
+        $tracker = new mod_videodebate\tracking_manager();
+        $tracker->update_completion($activity, $USER->id, $tracker->is_complete($activity, $USER->id));
         redirect(new moodle_url('/mod/videodebate/view.php', ['id' => $cm->id]), get_string('postsaved', 'videodebate'));
     }
 }
 
-$progress = $DB->get_record('videodebate_progress', ['videodebateid' => $activity->id, 'userid' => $USER->id]);
+$progress = $DB->get_record('videodebate_progress', [
+    'videodebateid' => $activity->id,
+    'userid' => $USER->id,
+]);
 if (!$progress) {
-    $progress = (object)['lastposition' => 0, 'percent' => 0, 'watchedsegments' => '[]', 'duration' => 0, 'uniquewatched' => 0];
+    $progress = (object)[
+        'lastposition' => 0,
+        'percent' => 0,
+        'watchedsegments' => '[]',
+        'duration' => 0,
+        'uniquewatched' => 0,
+    ];
 }
 
-$params = ['a' => $activity->id];
-$where = 'p.videodebateid = :a';
+$params = ['activityid' => $activity->id];
+$where = 'p.videodebateid = :activityid';
 if ($groupmode == SEPARATEGROUPS && !has_capability('moodle/site:accessallgroups', $context)) {
-    $where .= ' AND p.groupid = :g';
-    $params['g'] = $groupid;
+    $where .= ' AND p.groupid = :groupid';
+    $params['groupid'] = $groupid;
 } else if ($groupmode == VISIBLEGROUPS && $currentgroup) {
-    $where .= ' AND p.groupid = :g';
-    $params['g'] = $groupid;
+    $where .= ' AND p.groupid = :groupid';
+    $params['groupid'] = $groupid;
 }
+if (!$canmoderate) {
+    $where .= ' AND p.hidden = 0';
+}
+
 $posts = [];
+$orphans = [];
+$rootcount = 0;
 if ($showothers) {
+    $rootcount = (int)$DB->count_records_sql(
+        "SELECT COUNT(1) FROM {videodebate_posts} p WHERE {$where} AND p.isreply = 0",
+        $params
+    );
     $sql = "SELECT p.*, u.firstname, u.lastname, u.picture, u.imagealt, u.email
               FROM {videodebate_posts} p
               JOIN {user} u ON u.id = p.userid
-             WHERE {$where}
+             WHERE {$where} AND p.isreply = 0
           ORDER BY p.timecreated ASC";
-    $rawposts = $DB->get_records_sql($sql, $params);
+    $roots = $DB->get_records_sql($sql, $params, $page * $perpage, $perpage);
+
+    $replies = [];
+    if ($roots) {
+        [$insql, $inparams] = $DB->get_in_or_equal(array_keys($roots), SQL_PARAMS_NAMED, 'parent');
+        $replyparams = $params + $inparams;
+        $replysql = "SELECT p.*, u.firstname, u.lastname, u.picture, u.imagealt, u.email
+                       FROM {videodebate_posts} p
+                       JOIN {user} u ON u.id = p.userid
+                      WHERE {$where} AND p.isreply = 1 AND p.parentid {$insql}
+                   ORDER BY p.timecreated ASC";
+        $replies = $DB->get_records_sql($replysql, $replyparams);
+    }
+
+    $orphansql = "SELECT p.*, u.firstname, u.lastname, u.picture, u.imagealt, u.email
+                    FROM {videodebate_posts} p
+                    JOIN {user} u ON u.id = p.userid
+                   WHERE {$where} AND p.isreply = 1 AND p.parentid = 0
+                ORDER BY p.timecreated ASC";
+    $orphanrecords = $DB->get_records_sql($orphansql, $params, 0, $perpage);
+
+    $allposts = $roots + $replies + $orphanrecords;
     $evidenceby = [];
-    if ($rawposts) {
-        $postids = array_keys($rawposts);
-        [$insql, $inparams] = $DB->get_in_or_equal($postids, SQL_PARAMS_NAMED, 'ep');
-        $evs = $DB->get_records_select('videodebate_evidence', "postid {$insql}", $inparams, 'starttime ASC');
-        foreach ($evs as $ev) {
-            $evidenceby[$ev->postid][] = $ev;
+    if ($allposts) {
+        [$evidencesql, $evidenceparams] = $DB->get_in_or_equal(array_keys($allposts), SQL_PARAMS_NAMED, 'evidencepost');
+        $evidences = $DB->get_records_select(
+            'videodebate_evidence',
+            "postid {$evidencesql}",
+            $evidenceparams,
+            'starttime ASC'
+        );
+        foreach ($evidences as $evidence) {
+            $evidenceby[$evidence->postid][] = $evidence;
         }
     }
-    $children = [];
-    foreach ($rawposts as $post) {
+
+    $builditem = static function($post, bool $isreply = false) use (
+        $OUTPUT,
+        $USER,
+        $cm,
+        $canreply,
+        $canmoderate,
+        $positions,
+        $evidenceby,
+        $manager
+    ): array {
         $postuser = (object)[
             'id' => (int)$post->userid,
             'firstname' => $post->firstname,
@@ -144,39 +211,70 @@ if ($showothers) {
             'email' => $post->email,
         ];
         $item = [
-            'id' => $post->id,
-            'userid' => $post->userid,
+            'id' => (int)$post->id,
+            'userid' => (int)$post->userid,
             'fullname' => fullname($postuser),
             'userpicture' => $OUTPUT->user_picture($postuser, ['size' => 40]),
             'message' => nl2br(s($post->message)),
-            'position' => $positions[$post->positionkey] ?? '',
+            'position' => $post->positionlabel ?: ($positions[$post->positionkey] ?? ''),
             'date' => userdate($post->timecreated),
             'evidence' => [],
-            'canreply' => $canreply && (int)$post->userid !== (int)$USER->id,
-            'replyurl' => (new moodle_url('/mod/videodebate/view.php', ['id' => $cm->id, 'replyto' => $post->id]))->out(false),
+            'hidden' => !empty($post->hidden),
+            'canreply' => !$isreply && empty($post->hidden) && $canreply && (int)$post->userid !== (int)$USER->id,
+            'replyurl' => (new moodle_url('/mod/videodebate/view.php', [
+                'id' => $cm->id,
+                'replyto' => $post->id,
+            ]))->out(false),
+            'canmoderate' => $canmoderate,
         ];
-        foreach ($evidenceby[$post->id] ?? [] as $ev) {
+        if ($canmoderate) {
+            $item['editurl'] = (new moodle_url('/mod/videodebate/editpost.php', [
+                'id' => $cm->id,
+                'postid' => $post->id,
+            ]))->out(false);
+            $action = !empty($post->hidden) ? 'show' : 'hide';
+            $item['visibilityurl'] = (new moodle_url('/mod/videodebate/post_action.php', [
+                'id' => $cm->id,
+                'postid' => $post->id,
+                'action' => $action,
+                'sesskey' => sesskey(),
+            ]))->out(false);
+            $item['visibilitylabel'] = get_string($action . 'post', 'videodebate');
+            $item['deleteurl'] = (new moodle_url('/mod/videodebate/post_action.php', [
+                'id' => $cm->id,
+                'postid' => $post->id,
+                'action' => 'delete',
+                'sesskey' => sesskey(),
+            ]))->out(false);
+        }
+        foreach ($evidenceby[$post->id] ?? [] as $evidence) {
             $item['evidence'][] = [
-                'start' => (float)$ev->starttime,
-                'end' => (float)$ev->endtime,
-                'timecode' => $manager::format_timecode((float)$ev->starttime),
-                'endtimecode' => (float)$ev->endtime > (float)$ev->starttime
-                    ? $manager::format_timecode((float)$ev->endtime) : '',
-                'hasend' => (float)$ev->endtime > (float)$ev->starttime + 0.5,
-                'label' => format_string((string)$ev->label),
+                'start' => (float)$evidence->starttime,
+                'end' => (float)$evidence->endtime,
+                'timecode' => $manager::format_timecode((float)$evidence->starttime),
+                'endtimecode' => (float)$evidence->endtime > (float)$evidence->starttime
+                    ? $manager::format_timecode((float)$evidence->endtime)
+                    : '',
+                'hasend' => (float)$evidence->endtime > (float)$evidence->starttime + 0.5,
+                'label' => format_string((string)$evidence->label),
             ];
         }
-        if ((int)$post->parentid === 0) {
-            $posts[$post->id] = $item + ['replies' => []];
-        } else {
-            $children[$post->parentid][] = $item;
+        return $item;
+    };
+
+    foreach ($roots as $root) {
+        $posts[$root->id] = $builditem($root) + ['replies' => []];
+    }
+    foreach ($replies as $reply) {
+        if (isset($posts[$reply->parentid])) {
+            $posts[$reply->parentid]['replies'][] = $builditem($reply, true);
+            $posts[$reply->parentid]['hasreplies'] = true;
         }
     }
-    foreach ($children as $pid => $items) {
-        if (isset($posts[$pid])) {
-            $posts[$pid]['replies'] = $items;
-            $posts[$pid]['hasreplies'] = true;
-        }
+    foreach ($orphanrecords as $orphan) {
+        $item = $builditem($orphan, true);
+        $item['orphaned'] = true;
+        $orphans[] = $item;
     }
 }
 
@@ -190,6 +288,21 @@ $trackerconfig = [
     'segments' => json_decode((string)$progress->watchedsegments, true) ?: [],
 ];
 
+$usergrade = $DB->get_record('videodebate_grades', [
+    'videodebateid' => $activity->id,
+    'userid' => $USER->id,
+]);
+
+$pagingbar = '';
+if ($rootcount > $perpage) {
+    $pagingbar = $OUTPUT->paging_bar(
+        $rootcount,
+        $page,
+        $perpage,
+        new moodle_url('/mod/videodebate/view.php', ['id' => $cm->id])
+    );
+}
+
 $templatedata = [
     'name' => format_string($activity->name),
     'intro' => format_module_intro('videodebate', $activity, $cm->id),
@@ -200,14 +313,25 @@ $templatedata = [
     'percent' => (int)round((float)$progress->percent),
     'requiredpercent' => (int)$activity->completionpercent,
     'initialposted' => (bool)$initial,
-    'initialposition' => $initial ? ($positions[$initial->positionkey] ?? '') : '',
+    'initialposition' => $initial ? ($initial->positionlabel ?: ($positions[$initial->positionkey] ?? '')) : '',
     'showothers' => (bool)$showothers,
     'lockedothers' => !$showothers,
     'posts' => array_values($posts),
     'hasposts' => (bool)$posts,
+    'orphans' => $orphans,
+    'hasorphans' => (bool)$orphans,
+    'pagingbar' => $pagingbar,
+    'haspagingbar' => $pagingbar !== '',
     'canviewreport' => has_capability('mod/videodebate:viewreport', $context),
     'reporturl' => (new moodle_url('/mod/videodebate/report.php', ['id' => $cm->id]))->out(false),
     'replying' => (bool)$parentid,
+    'hasgrade' => (bool)$usergrade,
+    'usergrade' => $usergrade ? format_float((float)$usergrade->finalgrade, 2) : '',
+    'maxgrade' => format_float((float)$activity->grade, 2),
+    'hasfeedback' => $usergrade && trim((string)$usergrade->feedback) !== '',
+    'gradefeedback' => $usergrade
+        ? format_text((string)$usergrade->feedback, (int)$usergrade->feedbackformat)
+        : '',
 ];
 
 $PAGE->requires->strings_for_js([

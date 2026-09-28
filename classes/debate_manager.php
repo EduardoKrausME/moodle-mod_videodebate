@@ -179,6 +179,14 @@ class debate_manager {
                                      string $positionkey, string $message, array $evidence): int {
         global $DB;
         $now = time();
+        $cm = get_coursemodule_from_instance('videodebate', $activity->id, $activity->course, false, MUST_EXIST);
+        $context = \context_module::instance($cm->id);
+        if ($parentid === 0 && !has_capability('mod/videodebate:participate', $context, $userid)) {
+            throw new \required_capability_exception($context, 'mod/videodebate:participate', 'nopermissions', '');
+        }
+        if ($parentid !== 0 && !has_capability('mod/videodebate:reply', $context, $userid)) {
+            throw new \required_capability_exception($context, 'mod/videodebate:reply', 'nopermissions', '');
+        }
         if ($parentid === 0 && self::get_initial_post($activity->id, $userid)) {
             throw new \moodle_exception('initialpostexists', 'videodebate');
         }
@@ -195,6 +203,15 @@ class debate_manager {
             }
             if (!empty($parent->hidden)) {
                 throw new \moodle_exception('replytargethidden', 'videodebate');
+            }
+            if (!empty($activity->blinduntilpost) && !self::get_initial_post($activity->id, $userid)
+                    && !has_capability('mod/videodebate:viewall', $context, $userid)) {
+                throw new \moodle_exception('publishbeforeview', 'videodebate');
+            }
+            if ((int)$parent->groupid > 0
+                    && !groups_is_member((int)$parent->groupid, $userid)
+                    && !has_capability('moodle/site:accessallgroups', $context, $userid)) {
+                throw new \moodle_exception('cannotreplygroup', 'videodebate');
             }
             $positionkey = '';
         }
@@ -244,6 +261,22 @@ class debate_manager {
             ]);
         }
         $transaction->allow_commit();
+
+        $eventclass = $parentid === 0
+            ? \mod_videodebate\event\post_created::class
+            : \mod_videodebate\event\reply_created::class;
+        $event = $eventclass::create([
+            'objectid' => $postid,
+            'context' => $context,
+            'relateduserid' => $userid,
+            'other' => ['videodebateid' => (int)$activity->id],
+        ]);
+        $event->add_record_snapshot('videodebate', $activity);
+        $event->trigger();
+
+        if ($parentid !== 0) {
+            \mod_videodebate\notification_manager::notify_reply($activity, $cm, $postid, $parent, $userid);
+        }
         return $postid;
     }
 

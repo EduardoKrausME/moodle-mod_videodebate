@@ -5,14 +5,6 @@
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
-//
-// Moodle is distributed in the hope that it will be useful,
-// but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU General Public License for more details.
-//
-// You should have received a copy of the GNU General Public License
-// along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
  * Teacher participation report.
@@ -23,6 +15,7 @@
  */
 
 require('../../config.php');
+
 $id = required_param('id', PARAM_INT);
 $cm = get_coursemodule_from_id('videodebate', $id, 0, false, MUST_EXIST);
 $course = $DB->get_record('course', ['id' => $cm->course], '*', MUST_EXIST);
@@ -37,51 +30,128 @@ $PAGE->set_title(get_string('report', 'videodebate'));
 $PAGE->set_heading(format_string($course->fullname));
 $PAGE->navbar->add(get_string('report', 'videodebate'));
 
+$event = mod_videodebate\event\report_viewed::create([
+    'objectid' => $activity->id,
+    'context' => $context,
+    'other' => ['videodebateid' => (int)$activity->id],
+]);
+$event->add_record_snapshot('videodebate', $activity);
+$event->trigger();
+
 $positions = mod_videodebate\debate_manager::get_positions($activity);
 $currentgroup = groups_get_activity_group($cm, true);
-$users = get_enrolled_users($context, 'mod/videodebate:participate', 0,
+$users = get_enrolled_users(
+    $context,
+    'mod/videodebate:participate',
+    0,
     "u.id,u.firstname,u.lastname,u.email,u.picture,u.imagealt,u.firstnamephonetic,u.lastnamephonetic,u.middlename,u.alternatename",
-    'u.lastname ASC, u.firstname ASC');
+    'u.lastname ASC, u.firstname ASC'
+);
 if ($currentgroup > 0) {
     $members = groups_get_members($currentgroup, 'u.id');
     $users = array_intersect_key($users, $members);
 }
+
+$initialbyuser = [];
+$progressbyuser = [];
+$gradebyuser = [];
+$replycount = [];
+$evidencebyuser = [];
+
+if ($users) {
+    $userids = array_map('intval', array_keys($users));
+    [$usersql, $userparams] = $DB->get_in_or_equal($userids, SQL_PARAMS_NAMED, 'user');
+
+    $initials = $DB->get_records_select(
+        'videodebate_posts',
+        "videodebateid = :activityid AND isreply = 0 AND userid {$usersql}",
+        ['activityid' => $activity->id] + $userparams
+    );
+    foreach ($initials as $initial) {
+        $initialbyuser[$initial->userid] = $initial;
+    }
+
+    $progresses = $DB->get_records_select(
+        'videodebate_progress',
+        "videodebateid = :activityid AND userid {$usersql}",
+        ['activityid' => $activity->id] + $userparams
+    );
+    foreach ($progresses as $progress) {
+        $progressbyuser[$progress->userid] = $progress;
+    }
+
+    $grades = $DB->get_records_select(
+        'videodebate_grades',
+        "videodebateid = :activityid AND userid {$usersql}",
+        ['activityid' => $activity->id] + $userparams
+    );
+    foreach ($grades as $grade) {
+        $gradebyuser[$grade->userid] = $grade;
+    }
+
+    $replies = $DB->get_records_sql(
+        "SELECT userid AS id, userid, COUNT(1) AS replycount
+           FROM {videodebate_posts}
+          WHERE videodebateid = :activityid
+            AND isreply = 1
+            AND userid {$usersql}
+       GROUP BY userid",
+        ['activityid' => $activity->id] + $userparams
+    );
+    foreach ($replies as $row) {
+        $replycount[$row->userid] = (int)$row->replycount;
+    }
+
+    $evidence = $DB->get_records_sql(
+        "SELECT e.id, p.userid, e.starttime, e.endtime, e.label
+           FROM {videodebate_evidence} e
+           JOIN {videodebate_posts} p ON p.id = e.postid
+          WHERE p.videodebateid = :activityid
+            AND p.userid {$usersql}
+       ORDER BY p.userid, e.starttime",
+        ['activityid' => $activity->id] + $userparams
+    );
+    foreach ($evidence as $item) {
+        $evidencebyuser[$item->userid][] = $item;
+    }
+}
+
+$cangrade = has_capability('mod/videodebate:grade', $context);
 $rows = [];
 foreach ($users as $user) {
-    $initial = mod_videodebate\debate_manager::get_initial_post($activity->id, $user->id);
-    $progress = $DB->get_record('videodebate_progress', ['videodebateid' => $activity->id, 'userid' => $user->id]);
-    $grade = $DB->get_record('videodebate_grades', ['videodebateid' => $activity->id, 'userid' => $user->id]);
-    $evidences = $DB->get_records_sql(
-        'SELECT e.* FROM {videodebate_evidence} e JOIN {videodebate_posts} p ON p.id = e.postid '
-        . 'WHERE p.videodebateid = :activityid AND p.userid = :userid ORDER BY e.starttime ASC',
-        ['activityid' => $activity->id, 'userid' => $user->id]
-    );
+    $initial = $initialbyuser[$user->id] ?? null;
+    $progress = $progressbyuser[$user->id] ?? null;
+    $grade = $gradebyuser[$user->id] ?? null;
     $evidenceitems = [];
-    foreach ($evidences as $evidence) {
-        $start = mod_videodebate\debate_manager::format_timecode((float)$evidence->starttime);
+    foreach ($evidencebyuser[$user->id] ?? [] as $evidence) {
         $hasend = (float)$evidence->endtime > (float)$evidence->starttime + 0.5;
         $evidenceitems[] = [
-            'timecode' => $start . ($hasend
-                    ? '–' . mod_videodebate\debate_manager::format_timecode((float)$evidence->endtime) : ''),
+            'timecode' => mod_videodebate\debate_manager::format_timecode((float)$evidence->starttime)
+                . ($hasend ? '–' . mod_videodebate\debate_manager::format_timecode((float)$evidence->endtime) : ''),
             'label' => format_string((string)$evidence->label),
             'haslabel' => trim((string)$evidence->label) !== '',
         ];
     }
+    $replies = $replycount[$user->id] ?? 0;
     $rows[] = [
         'userid' => $user->id,
         'fullname' => fullname($user),
         'userpicture' => $OUTPUT->user_picture($user, ['size' => 35]),
-        'position' => $initial ? ($positions[$initial->positionkey] ?? '') : get_string('notpublished', 'videodebate'),
+        'position' => $initial
+            ? ($initial->positionlabel ?: ($positions[$initial->positionkey] ?? ''))
+            : get_string('notpublished', 'videodebate'),
         'arguments' => $initial ? 1 : 0,
-        'evidence' => count($evidenceitems),
         'evidenceitems' => $evidenceitems,
         'hasevidence' => (bool)$evidenceitems,
-        'replies' => mod_videodebate\debate_manager::reply_count($activity->id, $user->id),
-        'participation' => ($initial ? 1 : 0) + mod_videodebate\debate_manager::reply_count($activity->id, $user->id),
+        'replies' => $replies,
+        'participation' => ($initial ? 1 : 0) + $replies,
         'percent' => $progress ? round((float)$progress->percent, 1) : 0,
         'lastaccess' => $progress ? userdate($progress->timemodified) : get_string('never'),
         'grade' => $grade ? format_float($grade->finalgrade, 2) : '—',
-        'gradeurl' => (new moodle_url('/mod/videodebate/grade.php', ['id' => $cm->id, 'userid' => $user->id]))->out(false),
+        'cangrade' => $cangrade,
+        'gradeurl' => $cangrade
+            ? (new moodle_url('/mod/videodebate/grade.php', ['id' => $cm->id, 'userid' => $user->id]))->out(false)
+            : '',
     ];
 }
 
