@@ -33,23 +33,23 @@ class backup_videodebate_activity_structure_step extends backup_activity_structu
             'course', 'name', 'intro', 'introformat', 'question', 'positions', 'assignmentmode', 'blinduntilpost',
             'videosource', 'videourl', 'resumeplayback', 'allowseek', 'completionpercent', 'completionpost',
             'completionreplies', 'minevidence', 'grade', 'weightargument', 'weightevidence', 'weightparticipation',
-            'weightreplies', 'timecreated', 'timemodified'
+            'weightreplies', 'timecreated', 'timemodified',
         ]);
         $posts = new backup_nested_element('posts');
         $post = new backup_nested_element('post', ['id'], [
-            'userid', 'groupid', 'parentid', 'positionkey', 'message', 'messageformat', 'timecreated', 'timemodified'
+            'userid', 'groupid', 'parentid', 'positionkey', 'message', 'messageformat', 'timecreated', 'timemodified',
         ]);
         $evidences = new backup_nested_element('evidences');
         $evidence = new backup_nested_element('evidence', ['id'], ['starttime', 'endtime', 'label', 'timecreated']);
         $progresses = new backup_nested_element('progresses');
         $progress = new backup_nested_element('progress', ['id'], [
             'userid', 'duration', 'lastposition', 'uniquewatched', 'totalwatchtime', 'percent', 'watchedsegments',
-            'completed', 'timemodified'
+            'completed', 'timemodified',
         ]);
         $grades = new backup_nested_element('grades');
         $grade = new backup_nested_element('grade', ['id'], [
             'userid', 'graderid', 'argumentation', 'evidence', 'participation', 'replies', 'finalgrade', 'feedback',
-            'feedbackformat', 'timemodified'
+            'feedbackformat', 'timemodified',
         ]);
 
         $activity->add_child($posts);
