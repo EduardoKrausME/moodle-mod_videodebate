@@ -20,6 +20,7 @@ namespace mod_videodebate;
  * Tests for debate utilities.
  *
  * @package mod_videodebate
+ * @covers \mod_videodebate\debate_manager
  * @copyright 2026 Eduardo Kraus {@link https://eduardokraus.com}
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
