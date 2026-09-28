@@ -212,7 +212,7 @@ $templatedata = [
 
 $PAGE->requires->strings_for_js([
     'trackingerror', 'seekblocked', 'evidenceadded', 'evidenceempty', 'remove', 'evidencetitle',
-    'addcurrentmoment', 'startinterval', 'finishinterval', 'evidencedescription'
+    'addcurrentmoment', 'startinterval', 'finishinterval', 'evidencedescription',
 ], 'videodebate');
 $PAGE->requires->js_call_amd('mod_videodebate/tracker', 'init');
 $PAGE->requires->js_call_amd('mod_videodebate/debate', 'init');
