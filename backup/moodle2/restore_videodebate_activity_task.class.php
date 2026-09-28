@@ -26,6 +26,15 @@ require_once($CFG->dirroot . '/mod/videodebate/backup/moodle2/restore_videodebat
  */
 class restore_videodebate_activity_task extends restore_activity_task {
     /**
+     * Define particular restore settings for this activity.
+     *
+     * @return void
+     */
+    protected function define_my_settings(): void {
+        // No particular settings for this activity.
+    }
+
+    /**
      * Method define_my_steps.
      *
      * @return void Return value.
