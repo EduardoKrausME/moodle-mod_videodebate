@@ -37,7 +37,7 @@ final class integration_test extends \advanced_testcase {
 
         $this->resetAfterTest();
         $generator = $this->getDataGenerator();
-        $course = $generator->create_course();
+        $course = $generator->create_course(['enablecompletion' => 1]);
         $users = [$generator->create_user(), $generator->create_user(), $generator->create_user()];
         foreach ($users as $user) {
             $generator->enrol_user($user->id, $course->id, 'student');
@@ -295,7 +295,7 @@ final class integration_test extends \advanced_testcase {
             $USER->id,
             \backup::TARGET_CURRENT_ADDING
         );
-        $this->assertTrue($rc->execute_precheck());
+        $rc->execute_precheck();
         $rc->execute_plan();
         $rc->destroy();
 

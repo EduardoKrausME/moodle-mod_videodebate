@@ -31,6 +31,7 @@ class custom_completion extends \core_completion\activity_custom_completion {
      */
     public function get_state(string $rule): int {
         global $DB;
+        $this->validate_rule($rule);
         $activity = $DB->get_record('videodebate', ['id' => $this->cm->instance], '*', MUST_EXIST);
         $progress = $DB->get_record('videodebate_progress', ['videodebateid' => $activity->id, 'userid' => $this->userid]);
         if ($rule === 'completionpercent') {

@@ -98,5 +98,10 @@ function xmldb_videodebate_upgrade(int $oldversion): bool {
         upgrade_mod_savepoint(true, 2026092800, 'videodebate');
     }
 
+    if ($oldversion < 2026092801) {
+        // Refresh capabilities and message providers added with the production hardening release.
+        upgrade_mod_savepoint(true, 2026092801, 'videodebate');
+    }
+
     return true;
 }
