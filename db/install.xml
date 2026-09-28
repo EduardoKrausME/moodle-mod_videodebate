@@ -16,6 +16,9 @@
                 <FIELD NAME="blinduntilpost" TYPE="int" LENGTH="1" NOTNULL="true" DEFAULT="1" SEQUENCE="false"/>
                 <FIELD NAME="videosource" TYPE="char" LENGTH="20" NOTNULL="true" DEFAULT="url" SEQUENCE="false"/>
                 <FIELD NAME="videourl" TYPE="text" NOTNULL="false" SEQUENCE="false"/>
+                <FIELD NAME="durationseconds" TYPE="number" LENGTH="12" DECIMALS="3" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+                <FIELD NAME="transcript" TYPE="text" NOTNULL="false" SEQUENCE="false"/>
+                <FIELD NAME="captionlang" TYPE="char" LENGTH="20" NOTNULL="true" DEFAULT="en" SEQUENCE="false"/>
                 <FIELD NAME="resumeplayback" TYPE="int" LENGTH="1" NOTNULL="true" DEFAULT="1" SEQUENCE="false"/>
                 <FIELD NAME="allowseek" TYPE="int" LENGTH="1" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
                 <FIELD NAME="completionpercent" TYPE="int" LENGTH="3" NOTNULL="true" DEFAULT="80" SEQUENCE="false"/>
@@ -44,6 +47,9 @@
                 <FIELD NAME="groupid" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
                 <FIELD NAME="parentid" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
                 <FIELD NAME="positionkey" TYPE="char" LENGTH="100" NOTNULL="false" SEQUENCE="false"/>
+                <FIELD NAME="positionlabel" TYPE="char" LENGTH="255" NOTNULL="false" SEQUENCE="false"/>
+                <FIELD NAME="isreply" TYPE="int" LENGTH="1" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+                <FIELD NAME="hidden" TYPE="int" LENGTH="1" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
                 <FIELD NAME="message" TYPE="text" NOTNULL="true" SEQUENCE="false"/>
                 <FIELD NAME="messageformat" TYPE="int" LENGTH="4" NOTNULL="true" DEFAULT="1" SEQUENCE="false"/>
                 <FIELD NAME="timecreated" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
@@ -56,6 +62,7 @@
             </KEYS>
             <INDEXES>
                 <INDEX NAME="activity_user_ix" UNIQUE="false" FIELDS="videodebateid, userid"/>
+                <INDEX NAME="activity_reply_ix" UNIQUE="false" FIELDS="videodebateid, isreply"/>
                 <INDEX NAME="parent_ix" UNIQUE="false" FIELDS="parentid"/>
                 <INDEX NAME="group_ix" UNIQUE="false" FIELDS="groupid"/>
             </INDEXES>

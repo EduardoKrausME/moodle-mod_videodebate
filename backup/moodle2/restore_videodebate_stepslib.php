@@ -126,5 +126,6 @@ class restore_videodebate_activity_structure_step extends restore_activity_struc
     protected function after_execute(): void {
         $this->add_related_files('mod_videodebate', 'intro', null);
         $this->add_related_files('mod_videodebate', 'video', 0);
+        $this->add_related_files('mod_videodebate', 'captions', 0);
     }
 }

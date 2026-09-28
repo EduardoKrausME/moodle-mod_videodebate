@@ -38,32 +38,49 @@ class tracking_manager {
     public function update(\stdClass $activity, int $userid, float $current, float $duration,
                            float $start, float $end, float $rate): \stdClass {
         global $DB;
-        $duration = max(0, $duration);
-        $current = min(max(0, $current), $duration ?: $current);
-        $start = min(max(0, $start), $duration ?: $start);
-        $end = min(max($start, $end), $duration ?: $end);
-        $rate = min(4.0, max(0.25, $rate));
-        $record = $DB->get_record('videodebate_progress', ['videodebateid' => $activity->id, 'userid' => $userid]);
+        $record = $DB->get_record('videodebate_progress', [
+            'videodebateid' => $activity->id,
+            'userid' => $userid,
+        ]);
+        $canonicalduration = max(0, (float)($activity->durationseconds ?? 0));
+        if ($canonicalduration <= 0 && $record && (float)$record->duration > 0) {
+            $canonicalduration = (float)$record->duration;
+        }
+        if ($canonicalduration <= 0) {
+            throw new \moodle_exception('durationnotconfigured', 'videodebate');
+        }
+
+        $current = min(max(0, $current), $canonicalduration);
+        $start = min(max(0, $start), $canonicalduration);
+        $end = min(max($start, $end), $canonicalduration);
+        $rate = min(2.0, max(0.25, $rate));
+
+        $segments = $record ? (json_decode($record->watchedsegments, true) ?: []) : [];
+        $segments = $this->merge_segments($segments, $canonicalduration);
+
         $elapsed = $record ? max(1, time() - (int)$record->timemodified) : 5;
-        $maxsegment = min(8.0 * $rate, max(4.0, ($elapsed * $rate * 1.75) + 2.0));
+        $maxsegment = min(8.0 * $rate, max(4.0, ($elapsed * $rate * 1.5) + 1.5));
         if (($end - $start) > $maxsegment) {
             $end = $start;
         }
 
-        $segments = $record ? (json_decode($record->watchedsegments, true) ?: []) : [];
+        if (empty($activity->allowseek) && !$this->can_extend_from_watched_area($segments, $start)) {
+            $end = $start;
+        }
+
         if ($end > $start) {
             $segments[] = [$start, $end];
         }
-        $segments = $this->merge_segments($segments, $duration);
+        $segments = $this->merge_segments($segments, $canonicalduration);
         $unique = 0.0;
         foreach ($segments as $segment) {
             $unique += max(0, $segment[1] - $segment[0]);
         }
-        $percent = $duration > 0 ? min(100, ($unique / $duration) * 100) : 0;
+        $percent = min(100, ($unique / $canonicalduration) * 100);
         $data = (object)[
             'videodebateid' => $activity->id,
             'userid' => $userid,
-            'duration' => $duration,
+            'duration' => $canonicalduration,
             'lastposition' => $current,
             'uniquewatched' => $unique,
             'totalwatchtime' => ($record ? (float)$record->totalwatchtime : 0) + max(0, $end - $start),
@@ -141,6 +158,25 @@ class tracking_manager {
         if ($completion->is_enabled($cm) && (int)$cm->completion === COMPLETION_TRACKING_AUTOMATIC) {
             $completion->update_state($cm, $complete ? COMPLETION_COMPLETE : COMPLETION_INCOMPLETE, $userid);
         }
+    }
+
+    /**
+     * Check whether a new segment starts in or immediately after already watched content.
+     *
+     * @param array $segments Existing watched segments.
+     * @param float $start Proposed segment start.
+     * @return bool
+     */
+    private function can_extend_from_watched_area(array $segments, float $start): bool {
+        if ($start <= 1.5) {
+            return true;
+        }
+        foreach ($segments as $segment) {
+            if ($start >= (float)$segment[0] - 0.5 && $start <= (float)$segment[1] + 1.5) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**

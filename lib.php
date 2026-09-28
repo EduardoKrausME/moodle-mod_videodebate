@@ -88,12 +88,27 @@ function videodebate_add_instance(stdClass $data, ?mod_videodebate_mod_form $mfo
  */
 function videodebate_update_instance(stdClass $data, ?mod_videodebate_mod_form $mform = null): bool {
     global $DB;
+    $oldactivity = $DB->get_record('videodebate', ['id' => $data->instance], '*', MUST_EXIST);
+    $resetmedia = !empty($data->resetvideodata);
+    $gradeformulaaffected = (float)$oldactivity->grade !== (float)$data->grade
+        || (int)$oldactivity->weightargument !== (int)$data->weightargument
+        || (int)$oldactivity->weightevidence !== (int)$data->weightevidence
+        || (int)$oldactivity->weightparticipation !== (int)$data->weightparticipation
+        || (int)$oldactivity->weightreplies !== (int)$data->weightreplies;
+
     $data->id = $data->instance;
     $data->timemodified = time();
     $data->positions = mod_videodebate\debate_manager::normalise_positions($data->positions ?? '');
     $ok = $DB->update_record('videodebate', $data);
     videodebate_save_files($data);
-    videodebate_grade_item_update($data);
+
+    $activity = $DB->get_record('videodebate', ['id' => $data->id], '*', MUST_EXIST);
+    if ($resetmedia) {
+        videodebate_reset_media_data($activity);
+    } else if ($gradeformulaaffected) {
+        videodebate_recalculate_grades($activity);
+    }
+    videodebate_grade_item_update($activity);
     return $ok;
 }
 
@@ -152,6 +167,13 @@ function videodebate_save_files(stdClass $activity): void {
     } else if (($activity->videosource ?? '') !== 'upload') {
         get_file_storage()->delete_area_files($context->id, 'mod_videodebate', 'video', 0);
     }
+    if (isset($activity->captionfile)) {
+        file_save_draft_area_files((int)$activity->captionfile, $context->id, 'mod_videodebate', 'captions', 0, [
+            'subdirs' => 0,
+            'maxfiles' => 1,
+            'accepted_types' => ['.vtt'],
+        ]);
+    }
     $DB->set_field('videodebate', 'timemodified', time(), ['id' => $activity->id]);
 }
 
@@ -173,14 +195,14 @@ function videodebate_save_files(stdClass $activity): void {
  */
 function mod_videodebate_pluginfile($course, $cm, $context, string $filearea, array $args,
                                     bool $forcedownload, array $options = []): bool {
-    if ($context->contextlevel !== CONTEXT_MODULE || $filearea !== 'video') {
+    if ($context->contextlevel !== CONTEXT_MODULE || !in_array($filearea, ['video', 'captions'], true)) {
         return false;
     }
     require_login($course, true, $cm);
     require_capability('mod/videodebate:view', $context);
     $filename = array_pop($args);
     $filepath = '/' . ($args ? implode('/', $args) . '/' : '');
-    $file = get_file_storage()->get_file($context->id, 'mod_videodebate', 'video', 0, $filepath, $filename);
+    $file = get_file_storage()->get_file($context->id, 'mod_videodebate', $filearea, 0, $filepath, $filename);
     if (!$file || $file->is_directory()) {
         return false;
     }
@@ -197,7 +219,10 @@ function mod_videodebate_pluginfile($course, $cm, $context, string $filearea, ar
  * @throws coding_exception
  */
 function videodebate_get_file_areas($course, $cm, $context): array {
-    return ['video' => get_string('videofile', 'videodebate')];
+    return [
+        'video' => get_string('videofile', 'videodebate'),
+        'captions' => get_string('captionfile', 'videodebate'),
+    ];
 }
 
 /**
@@ -239,7 +264,12 @@ function videodebate_update_grades(stdClass $activity, int $userid = 0, bool $nu
     $records = $DB->get_records('videodebate_grades', $conditions);
     $grades = [];
     foreach ($records as $record) {
-        $grades[$record->userid] = (object)['userid' => $record->userid, 'rawgrade' => $record->finalgrade];
+        $grades[$record->userid] = (object)[
+            'userid' => $record->userid,
+            'rawgrade' => $record->finalgrade,
+            'feedback' => $record->feedback,
+            'feedbackformat' => $record->feedbackformat,
+        ];
     }
     if (!$grades && $userid && $nullifnone) {
         $grades[$userid] = (object)['userid' => $userid, 'rawgrade' => null];
@@ -324,4 +354,176 @@ function videodebate_get_completion_state($course, $cm, int $userid, bool $type)
     global $DB;
     $activity = $DB->get_record('videodebate', ['id' => $cm->instance], '*', MUST_EXIST);
     return (new tracking_manager())->is_complete($activity, $userid);
+}
+
+
+/**
+ * Recalculate stored final grades after the grading formula changes.
+ *
+ * @param stdClass $activity Activity record.
+ * @return void
+ */
+function videodebate_recalculate_grades(stdClass $activity): void {
+    global $DB;
+
+    $records = $DB->get_records('videodebate_grades', ['videodebateid' => $activity->id]);
+    foreach ($records as $record) {
+        $score = (
+            ((float)$record->argumentation * (int)$activity->weightargument)
+            + ((float)$record->evidence * (int)$activity->weightevidence)
+            + ((float)$record->participation * (int)$activity->weightparticipation)
+            + ((float)$record->replies * (int)$activity->weightreplies)
+        ) / 100;
+        $record->finalgrade = $score * ((float)$activity->grade / 100);
+        $record->timemodified = time();
+        $DB->update_record('videodebate_grades', $record);
+    }
+    videodebate_update_grades($activity);
+}
+
+/**
+ * Clear data which becomes invalid when the configured video changes.
+ *
+ * @param stdClass $activity Activity record.
+ * @return void
+ */
+function videodebate_reset_media_data(stdClass $activity): void {
+    global $DB, $CFG;
+
+    $postids = $DB->get_fieldset_select(
+        'videodebate_posts',
+        'id',
+        'videodebateid = :activityid',
+        ['activityid' => $activity->id]
+    );
+    if ($postids) {
+        [$insql, $params] = $DB->get_in_or_equal($postids, SQL_PARAMS_NAMED, 'post');
+        $DB->delete_records_select('videodebate_evidence', "postid {$insql}", $params);
+    }
+    $DB->delete_records('videodebate_progress', ['videodebateid' => $activity->id]);
+    $DB->delete_records('videodebate_grades', ['videodebateid' => $activity->id]);
+
+    require_once($CFG->libdir . '/gradelib.php');
+    grade_update(
+        'mod/videodebate',
+        $activity->course,
+        'mod',
+        'videodebate',
+        $activity->id,
+        0,
+        null,
+        ['reset' => true]
+    );
+
+    $cm = get_coursemodule_from_instance('videodebate', $activity->id, $activity->course, false, IGNORE_MISSING);
+    if ($cm) {
+        $course = get_course($activity->course);
+        (new completion_info($course))->reset_all_state($cm);
+    }
+}
+
+/**
+ * Add Video Debate options to the course reset form.
+ *
+ * @param MoodleQuickForm $mform Reset form.
+ * @return void
+ */
+function videodebate_reset_course_form_definition(&$mform): void {
+    $mform->addElement('header', 'videodebateheader', get_string('modulenameplural', 'videodebate'));
+    $mform->addElement('checkbox', 'reset_videodebate_posts', get_string('resetposts', 'videodebate'));
+    $mform->addElement('checkbox', 'reset_videodebate_progress', get_string('resetprogress', 'videodebate'));
+    $mform->addElement('checkbox', 'reset_videodebate_grades', get_string('resetgrades', 'videodebate'));
+}
+
+/**
+ * Default values for course reset.
+ *
+ * @param stdClass $course Course record.
+ * @return array
+ */
+function videodebate_reset_course_form_defaults($course): array {
+    return [
+        'reset_videodebate_posts' => 1,
+        'reset_videodebate_progress' => 1,
+        'reset_videodebate_grades' => 1,
+    ];
+}
+
+/**
+ * Reset participant data for Video Debate activities in a course.
+ *
+ * @param stdClass $data Course reset data.
+ * @return array
+ */
+function videodebate_reset_userdata($data): array {
+    global $DB, $CFG;
+
+    $status = [];
+    $activities = $DB->get_records('videodebate', ['course' => $data->courseid]);
+    if (!$activities) {
+        return $status;
+    }
+
+    foreach ($activities as $activity) {
+        if (!empty($data->reset_videodebate_posts)) {
+            $postids = $DB->get_fieldset_select(
+                'videodebate_posts',
+                'id',
+                'videodebateid = :activityid',
+                ['activityid' => $activity->id]
+            );
+            if ($postids) {
+                [$insql, $params] = $DB->get_in_or_equal($postids, SQL_PARAMS_NAMED, 'post');
+                $DB->delete_records_select('videodebate_evidence', "postid {$insql}", $params);
+            }
+            $DB->delete_records('videodebate_posts', ['videodebateid' => $activity->id]);
+        }
+        if (!empty($data->reset_videodebate_progress)) {
+            $DB->delete_records('videodebate_progress', ['videodebateid' => $activity->id]);
+        }
+        if (!empty($data->reset_videodebate_grades)) {
+            $DB->delete_records('videodebate_grades', ['videodebateid' => $activity->id]);
+            require_once($CFG->libdir . '/gradelib.php');
+            grade_update(
+                'mod/videodebate',
+                $activity->course,
+                'mod',
+                'videodebate',
+                $activity->id,
+                0,
+                null,
+                ['reset' => true]
+            );
+        }
+        if (!empty($data->reset_videodebate_posts) || !empty($data->reset_videodebate_progress)) {
+            $cm = get_coursemodule_from_instance('videodebate', $activity->id, $activity->course, false, IGNORE_MISSING);
+            if ($cm) {
+                $course = get_course($activity->course);
+                (new completion_info($course))->reset_all_state($cm);
+            }
+        }
+    }
+
+    if (!empty($data->reset_videodebate_posts)) {
+        $status[] = [
+            'component' => get_string('modulenameplural', 'videodebate'),
+            'item' => get_string('resetposts', 'videodebate'),
+            'error' => false,
+        ];
+    }
+    if (!empty($data->reset_videodebate_progress)) {
+        $status[] = [
+            'component' => get_string('modulenameplural', 'videodebate'),
+            'item' => get_string('resetprogress', 'videodebate'),
+            'error' => false,
+        ];
+    }
+    if (!empty($data->reset_videodebate_grades)) {
+        $status[] = [
+            'component' => get_string('modulenameplural', 'videodebate'),
+            'item' => get_string('resetgrades', 'videodebate'),
+            'error' => false,
+        ];
+    }
+    return $status;
 }

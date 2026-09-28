@@ -125,7 +125,9 @@ class debate_manager {
     public static function get_initial_post(int $activityid, int $userid): ?\stdClass {
         global $DB;
         return $DB->get_record('videodebate_posts', [
-            'videodebateid' => $activityid, 'userid' => $userid, 'parentid' => 0,
+            'videodebateid' => $activityid,
+            'userid' => $userid,
+            'isreply' => 0,
         ]) ?: null;
     }
 
@@ -138,8 +140,11 @@ class debate_manager {
      */
     public static function reply_count(int $activityid, int $userid): int {
         global $DB;
-        return $DB->count_records_select('videodebate_posts',
-            'videodebateid = :a AND userid = :u AND parentid <> 0', ['a' => $activityid, 'u' => $userid]);
+        return $DB->count_records('videodebate_posts', [
+            'videodebateid' => $activityid,
+            'userid' => $userid,
+            'isreply' => 1,
+        ]);
     }
 
     /**
@@ -178,9 +183,18 @@ class debate_manager {
             throw new \moodle_exception('initialpostexists', 'videodebate');
         }
         if ($parentid !== 0) {
-            $parent = $DB->get_record('videodebate_posts', ['id' => $parentid, 'videodebateid' => $activity->id], '*', MUST_EXIST);
+            $parent = $DB->get_record('videodebate_posts', [
+                'id' => $parentid,
+                'videodebateid' => $activity->id,
+            ], '*', MUST_EXIST);
             if ((int)$parent->userid === $userid) {
                 throw new \moodle_exception('cannotreplyself', 'videodebate');
+            }
+            if (!empty($parent->isreply) || (int)$parent->parentid !== 0) {
+                throw new \moodle_exception('nestedreplynotallowed', 'videodebate');
+            }
+            if (!empty($parent->hidden)) {
+                throw new \moodle_exception('replytargethidden', 'videodebate');
             }
             $positionkey = '';
         }
@@ -194,12 +208,16 @@ class debate_manager {
         if ($parentid === 0 && count($evidence) < (int)$activity->minevidence) {
             throw new \moodle_exception('notenoughevidence', 'videodebate', '', $activity->minevidence);
         }
+        $positionlabel = $parentid === 0 ? (string)($positions[$positionkey] ?? '') : '';
         $post = (object)[
             'videodebateid' => $activity->id,
             'userid' => $userid,
             'groupid' => $groupid,
             'parentid' => $parentid,
             'positionkey' => $positionkey ?: null,
+            'positionlabel' => $positionlabel ?: null,
+            'isreply' => $parentid !== 0 ? 1 : 0,
+            'hidden' => 0,
             'message' => $message,
             'messageformat' => FORMAT_HTML,
             'timecreated' => $now,

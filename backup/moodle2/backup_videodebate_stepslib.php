@@ -31,13 +31,15 @@ class backup_videodebate_activity_structure_step extends backup_activity_structu
         $userinfo = $this->get_setting_value('userinfo');
         $activity = new backup_nested_element('videodebate', ['id'], [
             'course', 'name', 'intro', 'introformat', 'question', 'positions', 'assignmentmode', 'blinduntilpost',
-            'videosource', 'videourl', 'resumeplayback', 'allowseek', 'completionpercent', 'completionpost',
+            'videosource', 'videourl', 'durationseconds', 'transcript', 'captionlang', 'resumeplayback', 'allowseek',
+            'completionpercent', 'completionpost',
             'completionreplies', 'minevidence', 'grade', 'weightargument', 'weightevidence', 'weightparticipation',
             'weightreplies', 'timecreated', 'timemodified',
         ]);
         $posts = new backup_nested_element('posts');
         $post = new backup_nested_element('post', ['id'], [
-            'userid', 'groupid', 'parentid', 'positionkey', 'message', 'messageformat', 'timecreated', 'timemodified',
+            'userid', 'groupid', 'parentid', 'positionkey', 'positionlabel', 'isreply', 'hidden', 'message',
+            'messageformat', 'timecreated', 'timemodified',
         ]);
         $evidences = new backup_nested_element('evidences');
         $evidence = new backup_nested_element('evidence', ['id'], ['starttime', 'endtime', 'label', 'timecreated']);
@@ -75,6 +77,7 @@ class backup_videodebate_activity_structure_step extends backup_activity_structu
         }
         $activity->annotate_files('mod_videodebate', 'intro', null);
         $activity->annotate_files('mod_videodebate', 'video', 0);
+        $activity->annotate_files('mod_videodebate', 'captions', 0);
         return $this->prepare_activity_structure($activity);
     }
 }

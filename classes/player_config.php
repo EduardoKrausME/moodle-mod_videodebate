@@ -42,6 +42,27 @@ class player_config {
                     $file->get_filepath(), $file->get_filename())->out(false);
             }
         }
+        $captionurl = '';
+        $captionfiles = get_file_storage()->get_area_files(
+            $context->id,
+            'mod_videodebate',
+            'captions',
+            0,
+            'itemid, filepath, filename',
+            false
+        );
+        $captionfile = reset($captionfiles);
+        if ($captionfile) {
+            $captionurl = \moodle_url::make_pluginfile_url(
+                $context->id,
+                'mod_videodebate',
+                'captions',
+                0,
+                $captionfile->get_filepath(),
+                $captionfile->get_filename()
+            )->out(false);
+        }
+
         $id = '';
         if ($source === 'youtube') {
             $id = self::youtube_id($url);
@@ -55,6 +76,11 @@ class player_config {
             'youtube' => $source === 'youtube' && $id !== '',
             'vimeo' => $source === 'vimeo' && $id !== '',
             'html5' => in_array($source, ['upload', 'url'], true),
+            'captionurl' => $captionurl,
+            'hascaption' => $captionurl !== '',
+            'captionlang' => (string)($activity->captionlang ?? 'en'),
+            'transcript' => format_text((string)($activity->transcript ?? ''), FORMAT_PLAIN),
+            'hastranscript' => trim((string)($activity->transcript ?? '')) !== '',
         ];
     }
 

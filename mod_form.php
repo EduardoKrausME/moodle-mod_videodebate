@@ -61,10 +61,31 @@ class mod_videodebate_mod_form extends moodleform_mod {
         $mform->setType('videourl', PARAM_RAW_TRIMMED);
         $mform->hideIf('videourl', 'videosource', 'eq', 'upload');
 
+        $mform->addElement('text', 'durationseconds', get_string('durationseconds', 'videodebate'), ['size' => 10]);
+        $mform->setType('durationseconds', PARAM_FLOAT);
+        $mform->addHelpButton('durationseconds', 'durationseconds', 'videodebate');
+
         $mform->addElement('selectyesno', 'resumeplayback', get_string('resumeplayback', 'videodebate'));
         $mform->setDefault('resumeplayback', 1);
         $mform->addElement('selectyesno', 'allowseek', get_string('allowseek', 'videodebate'));
         $mform->setDefault('allowseek', 0);
+
+        $mform->addElement('html', '<h3>' . get_string('accessibilityheader', 'videodebate') . '</h3>');
+        $mform->addElement('textarea', 'transcript', get_string('transcript', 'videodebate'), ['rows' => 8, 'cols' => 80]);
+        $mform->setType('transcript', PARAM_TEXT);
+        $mform->addElement('text', 'captionlang', get_string('captionlang', 'videodebate'), ['size' => 10]);
+        $mform->setType('captionlang', PARAM_ALPHANUMEXT);
+        $mform->setDefault('captionlang', 'en');
+        $mform->addElement('filemanager', 'captionfile', get_string('captionfile', 'videodebate'), null, [
+            'subdirs' => 0,
+            'maxfiles' => 1,
+            'accepted_types' => ['.vtt'],
+        ]);
+
+        if ($this->current && !empty($this->current->id)) {
+            $mform->addElement('advcheckbox', 'resetvideodata', get_string('resetvideodata', 'videodebate'));
+            $mform->addHelpButton('resetvideodata', 'resetvideodata', 'videodebate');
+        }
 
         $mform->addElement('html', '<h3>' . get_string('debateheader', 'videodebate') . '</h3>');
         $mform->addElement('textarea', 'question', get_string('debatequestion', 'videodebate'), ['rows' => 4, 'cols' => 80]);
@@ -128,6 +149,14 @@ class mod_videodebate_mod_form extends moodleform_mod {
                 file_prepare_draft_area($draftid, $context->id, 'mod_videodebate', 'video', 0,
                     ['subdirs' => 0, 'maxfiles' => 1, 'accepted_types' => ['video']]);
                 $defaultvalues['videofile'] = $draftid;
+
+                $captiondraftid = file_get_submitted_draft_itemid('captionfile');
+                file_prepare_draft_area($captiondraftid, $context->id, 'mod_videodebate', 'captions', 0, [
+                    'subdirs' => 0,
+                    'maxfiles' => 1,
+                    'accepted_types' => ['.vtt'],
+                ]);
+                $defaultvalues['captionfile'] = $captiondraftid;
             }
         }
     }
@@ -162,6 +191,15 @@ class mod_videodebate_mod_form extends moodleform_mod {
             && !preg_match('~vimeo\.com/(?:video/)?[0-9]+~i', $sourcevalue)) {
             $errors['videourl'] = get_string('errorinvalidvimeo', 'videodebate');
         }
+        $duration = (float)($data['durationseconds'] ?? 0);
+        if ($duration <= 0) {
+            $errors['durationseconds'] = get_string('errordurationrequired', 'videodebate');
+        }
+        $captionlang = trim((string)($data['captionlang'] ?? ''));
+        if ($captionlang === '' || !preg_match('/^[A-Za-z0-9_-]{2,20}$/', $captionlang)) {
+            $errors['captionlang'] = get_string('errorcaptionlang', 'videodebate');
+        }
+
         $positions = mod_videodebate\debate_manager::positions_from_text($data['positions'] ?? '');
         if (count($positions) < 2) {
             $errors['positions'] = get_string('errorpositions', 'videodebate');
@@ -191,7 +229,7 @@ class mod_videodebate_mod_form extends moodleform_mod {
         if ($grade < 0 || $grade > 100) {
             $errors['grade'] = get_string('errorgrade', 'videodebate');
         }
-        foreach (['videofile'] as $field) {
+        foreach (['videofile', 'captionfile'] as $field) {
             $draftid = (int)($data[$field] ?? 0);
             if ($draftid > 0) {
                 $draftinfo = file_get_draft_area_info($draftid);
@@ -200,7 +238,80 @@ class mod_videodebate_mod_form extends moodleform_mod {
                 }
             }
         }
+        if ($this->current && !empty($this->current->id)
+                && $this->video_changed($data)
+                && $this->has_user_data((int)$this->current->id)
+                && empty($data['resetvideodata'])) {
+            $errors['resetvideodata'] = get_string('errorresetvideodata', 'videodebate');
+        }
+
         return $errors;
+    }
+
+    /**
+     * Whether the configured video differs from the existing activity.
+     *
+     * @param array $data Submitted form data.
+     * @return bool
+     */
+    private function video_changed(array $data): bool {
+        global $DB;
+
+        $current = $DB->get_record('videodebate', ['id' => (int)$this->current->id], '*', MUST_EXIST);
+        if ((string)$current->videosource !== (string)($data['videosource'] ?? '')
+                || trim((string)$current->videourl) !== trim((string)($data['videourl'] ?? ''))
+                || abs((float)$current->durationseconds - (float)($data['durationseconds'] ?? 0)) > 0.01) {
+            return true;
+        }
+        if (($data['videosource'] ?? '') !== 'upload') {
+            return false;
+        }
+
+        $cm = get_coursemodule_from_instance('videodebate', $current->id, $current->course, false, IGNORE_MISSING);
+        if (!$cm) {
+            return false;
+        }
+        $context = context_module::instance($cm->id);
+        $stored = get_file_storage()->get_area_files(
+            $context->id,
+            'mod_videodebate',
+            'video',
+            0,
+            'filename',
+            false
+        );
+        $storedhashes = array_map(static fn($file) => $file->get_contenthash(), $stored);
+        sort($storedhashes);
+
+        $draftid = (int)($data['videofile'] ?? 0);
+        $drafthashes = [];
+        if ($draftid) {
+            $draftcontext = context_user::instance($GLOBALS['USER']->id);
+            $draftfiles = get_file_storage()->get_area_files(
+                $draftcontext->id,
+                'user',
+                'draft',
+                $draftid,
+                'filename',
+                false
+            );
+            $drafthashes = array_map(static fn($file) => $file->get_contenthash(), $draftfiles);
+            sort($drafthashes);
+        }
+        return $storedhashes !== $drafthashes;
+    }
+
+    /**
+     * Whether the activity already contains participant data.
+     *
+     * @param int $activityid Activity id.
+     * @return bool
+     */
+    private function has_user_data(int $activityid): bool {
+        global $DB;
+        return $DB->record_exists('videodebate_posts', ['videodebateid' => $activityid])
+            || $DB->record_exists('videodebate_progress', ['videodebateid' => $activityid])
+            || $DB->record_exists('videodebate_grades', ['videodebateid' => $activityid]);
     }
 
     /**
