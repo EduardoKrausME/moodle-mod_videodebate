@@ -8,3 +8,14 @@
     border: 0;
     background: #000;
 }
+
+.mod-videodebate .videodebate-transcript {
+    max-width: 70rem;
+}
+.mod-videodebate .videodebate-transcript > summary {
+    cursor: pointer;
+    font-weight: 600;
+}
+.mod-videodebate .videodebate-transcript > div {
+    white-space: pre-wrap;
+}
