@@ -76,8 +76,8 @@ class backup_videodebate_activity_structure_step extends backup_activity_structu
             $grade->annotate_ids('user', 'graderid');
         }
         $activity->annotate_files('mod_videodebate', 'intro', null);
-        $activity->annotate_files('mod_videodebate', 'video', 0);
-        $activity->annotate_files('mod_videodebate', 'captions', 0);
+        $activity->annotate_files('mod_videodebate', 'video', null);
+        $activity->annotate_files('mod_videodebate', 'captions', null);
         return $this->prepare_activity_structure($activity);
     }
 }
