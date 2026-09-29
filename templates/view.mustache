@@ -61,7 +61,7 @@
                 {{/videoid}}
                 {{^videoid}}
                     <video id="videodebate-player" class="videodebate-player" controls preload="metadata" playsinline>
-                        <source src="{{{url}}}">
+                        <source src="{{url}}">
                         {{#hascaption}}
                             <track kind="captions" src="{{{captionurl}}}" srclang="{{captionlang}}"
                                    label="{{#str}}captions, videodebate{{/str}}" default>
