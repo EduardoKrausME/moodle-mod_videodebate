@@ -38,6 +38,15 @@ if (!is_enrolled($context, $userid, '', true) || !has_capability('mod/videodebat
     throw new moodle_exception('invaliduser', 'error');
 }
 
+$groupmode = groups_get_activity_groupmode($cm);
+if ($groupmode === SEPARATEGROUPS && !has_capability('moodle/site:accessallgroups', $context)) {
+    $gradergroups = groups_get_all_groups($course->id, $USER->id, $cm->groupingid, 'g.id');
+    $usergroups = groups_get_all_groups($course->id, $userid, $cm->groupingid, 'g.id');
+    if (!$gradergroups || !$usergroups || !array_intersect_key($gradergroups, $usergroups)) {
+        throw new moodle_exception('invaliduser', 'error');
+    }
+}
+
 $PAGE->set_url('/mod/videodebate/grade.php', ['id' => $cm->id, 'userid' => $userid]);
 $PAGE->set_context($context);
 $PAGE->set_title(get_string('gradeparticipant', 'videodebate', fullname($user)));
