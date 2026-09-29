@@ -180,8 +180,11 @@ class mod_videodebate_mod_form extends moodleform_mod {
             }
         } else if ($sourcevalue === '') {
             $errors['videourl'] = get_string('required');
-        } else if ($source === 'url' && !preg_match('~^https?://~i', $sourcevalue)) {
-            $errors['videourl'] = get_string('errorinvalidurl', 'videodebate');
+        } else if ($source === 'url') {
+            $cleanurl = clean_param($sourcevalue, PARAM_URL);
+            if ($cleanurl !== $sourcevalue || !preg_match('~^https?://~i', $cleanurl)) {
+                $errors['videourl'] = get_string('errorinvalidurl', 'videodebate');
+            }
         } else if ($source === 'youtube'
             && !preg_match('~^[A-Za-z0-9_-]{6,}$~', $sourcevalue)
             && !preg_match('~(?:youtu\.be/|youtube\.com/(?:watch\?v=|embed/|shorts/))[A-Za-z0-9_-]{6,}~i', $sourcevalue)) {
