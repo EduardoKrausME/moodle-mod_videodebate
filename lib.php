@@ -70,6 +70,9 @@ function videodebate_add_instance(stdClass $data, ?mod_videodebate_mod_form $mfo
     $now = time();
     $data->timecreated = $now;
     $data->timemodified = $now;
+    if (($data->videosource ?? '') === 'url') {
+        $data->videourl = clean_param((string)($data->videourl ?? ''), PARAM_URL);
+    }
     $data->positions = mod_videodebate\debate_manager::normalise_positions($data->positions ?? '');
     $id = $DB->insert_record('videodebate', $data);
     $data->id = $id;
@@ -98,6 +101,9 @@ function videodebate_update_instance(stdClass $data, ?mod_videodebate_mod_form $
 
     $data->id = $data->instance;
     $data->timemodified = time();
+    if (($data->videosource ?? '') === 'url') {
+        $data->videourl = clean_param((string)($data->videourl ?? ''), PARAM_URL);
+    }
     $data->positions = mod_videodebate\debate_manager::normalise_positions($data->positions ?? '');
     $ok = $DB->update_record('videodebate', $data);
     videodebate_save_files($data);
