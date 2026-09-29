@@ -25,5 +25,5 @@ Feature: Use a Video Debate activity
     Given I log in as "student1"
     When I am on the "Test debate" "videodebate activity" page
     Then I should see "What position do you defend?"
-    And I should see "Publish argument"
+    And the "Publish argument" "button" should exist
     And I should see "Video progress"
