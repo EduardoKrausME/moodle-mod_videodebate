@@ -47,7 +47,9 @@ $event->add_record_snapshot('videodebate', $activity);
 $event->trigger();
 
 $positions = mod_videodebate\debate_manager::get_positions($activity);
-$currentgroup = groups_get_activity_group($cm, true);
+$groupmode = groups_get_activity_groupmode($cm);
+$currentgroup = $groupmode ? groups_get_activity_group($cm, true) : 0;
+$accessallgroups = has_capability('moodle/site:accessallgroups', $context);
 $users = get_enrolled_users(
     $context,
     'mod/videodebate:participate',
@@ -55,7 +57,14 @@ $users = get_enrolled_users(
     "u.id,u.firstname,u.lastname,u.email,u.picture,u.imagealt,u.firstnamephonetic,u.lastnamephonetic,u.middlename,u.alternatename",
     'u.lastname ASC, u.firstname ASC'
 );
-if ($currentgroup > 0) {
+if ($groupmode === SEPARATEGROUPS && !$accessallgroups) {
+    if ($currentgroup > 0) {
+        $members = groups_get_members($currentgroup, 'u.id');
+        $users = array_intersect_key($users, $members);
+    } else {
+        $users = [];
+    }
+} else if ($currentgroup > 0) {
     $members = groups_get_members($currentgroup, 'u.id');
     $users = array_intersect_key($users, $members);
 }
