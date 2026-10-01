@@ -17,8 +17,8 @@
 namespace mod_videodebate\form;
 use html_writer;
 use moodleform;
-global $CFG;
 defined('MOODLE_INTERNAL') || die;
+global $CFG;
 
 require_once("{$CFG->libdir}/formslib.php");
 
