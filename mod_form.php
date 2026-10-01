@@ -21,9 +21,10 @@
  * @copyright 2026 Eduardo Kraus {@link https://eduardokraus.com}
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-defined('MOODLE_INTERNAL') || die();
 
 global $CFG;
+defined('MOODLE_INTERNAL') || die;
+
 require_once($CFG->dirroot . '/course/moodleform_mod.php');
 
 /**
@@ -242,9 +243,9 @@ class mod_videodebate_mod_form extends moodleform_mod {
             }
         }
         if ($this->current && !empty($this->current->id)
-                && $this->video_changed($data)
-                && $this->has_user_data((int)$this->current->id)
-                && empty($data['resetvideodata'])) {
+            && $this->video_changed($data)
+            && $this->has_user_data((int)$this->current->id)
+            && empty($data['resetvideodata'])) {
             $errors['resetvideodata'] = get_string('errorresetvideodata', 'videodebate');
         }
 
@@ -262,8 +263,8 @@ class mod_videodebate_mod_form extends moodleform_mod {
 
         $current = $DB->get_record('videodebate', ['id' => (int)$this->current->id], '*', MUST_EXIST);
         if ((string)$current->videosource !== (string)($data['videosource'] ?? '')
-                || trim((string)$current->videourl) !== trim((string)($data['videourl'] ?? ''))
-                || abs((float)$current->durationseconds - (float)($data['durationseconds'] ?? 0)) > 0.01) {
+            || trim((string)$current->videourl) !== trim((string)($data['videourl'] ?? ''))
+            || abs((float)$current->durationseconds - (float)($data['durationseconds'] ?? 0)) > 0.01) {
             return true;
         }
         if (($data['videosource'] ?? '') !== 'upload') {

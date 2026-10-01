@@ -16,6 +16,9 @@
 
 namespace mod_videodebate\event;
 
+use core\event\base;
+use moodle_url;
+
 /**
  * grade updated event.
  *
@@ -23,7 +26,7 @@ namespace mod_videodebate\event;
  * @copyright 2026 Eduardo Kraus {@link https://eduardokraus.com}
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-class grade_updated extends \core\event\base {
+class grade_updated extends base {
     /**
      * Initialise event metadata.
      *
@@ -57,9 +60,9 @@ class grade_updated extends \core\event\base {
     /**
      * Event URL.
      *
-     * @return \moodle_url
+     * @return moodle_url
      */
-    public function get_url(): \moodle_url {
-        return new \moodle_url('/mod/videodebate/view.php', ['id' => $this->contextinstanceid]);
+    public function get_url(): moodle_url {
+        return new moodle_url('/mod/videodebate/view.php', ['id' => $this->contextinstanceid]);
     }
 }

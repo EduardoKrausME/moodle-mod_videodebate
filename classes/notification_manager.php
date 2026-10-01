@@ -16,6 +16,11 @@
 
 namespace mod_videodebate;
 
+use core\message\message;
+use html_writer;
+use moodle_url;
+use stdClass;
+
 /**
  * Sends Video Debate notifications through Moodle messaging.
  *
@@ -27,15 +32,15 @@ class notification_manager {
     /**
      * Notify a participant that somebody replied to their argument.
      *
-     * @param \stdClass $activity Activity.
-     * @param \stdClass $cm Course module.
+     * @param stdClass $activity Activity.
+     * @param stdClass $cm Course module.
      * @param int $postid Reply id.
-     * @param \stdClass $parent Parent post.
+     * @param stdClass $parent Parent post.
      * @param int $authorid Reply author.
      * @return void
      */
-    public static function notify_reply(\stdClass $activity, \stdClass $cm, int $postid,
-            \stdClass $parent, int $authorid): void {
+    public static function notify_reply(stdClass $activity, stdClass $cm, int $postid,
+                                        stdClass $parent, int $authorid): void {
         global $DB;
 
         if ((int)$parent->userid === $authorid) {
@@ -47,7 +52,7 @@ class notification_manager {
             return;
         }
 
-        $url = new \moodle_url('/mod/videodebate/view.php', ['id' => $cm->id], 'post-' . $postid);
+        $url = new moodle_url('/mod/videodebate/view.php', ['id' => $cm->id], 'post-' . $postid);
         $a = (object)[
             'author' => fullname($author),
             'activity' => format_string($activity->name),
@@ -65,16 +70,16 @@ class notification_manager {
     /**
      * Notify a participant that their debate was graded.
      *
-     * @param \stdClass $activity Activity.
-     * @param \stdClass $cm Course module.
-     * @param \stdClass $grader Grader.
-     * @param \stdClass $recipient Student.
+     * @param stdClass $activity Activity.
+     * @param stdClass $cm Course module.
+     * @param stdClass $grader Grader.
+     * @param stdClass $recipient Student.
      * @param float $grade Final grade.
      * @return void
      */
-    public static function notify_grade(\stdClass $activity, \stdClass $cm, \stdClass $grader,
-            \stdClass $recipient, float $grade): void {
-        $url = new \moodle_url('/mod/videodebate/view.php', ['id' => $cm->id]);
+    public static function notify_grade(stdClass $activity, stdClass $cm, stdClass $grader,
+                                        stdClass $recipient, float $grade): void {
+        $url = new moodle_url('/mod/videodebate/view.php', ['id' => $cm->id]);
         $a = (object)[
             'activity' => format_string($activity->name),
             'grade' => format_float($grade, 2),
@@ -94,16 +99,16 @@ class notification_manager {
      * Send a Moodle notification.
      *
      * @param string $name Message provider name.
-     * @param \stdClass $from Sender.
-     * @param \stdClass $to Recipient.
+     * @param stdClass $from Sender.
+     * @param stdClass $to Recipient.
      * @param string $subject Subject.
      * @param string $body Body.
-     * @param \moodle_url $url Context URL.
+     * @param moodle_url $url Context URL.
      * @return void
      */
-    private static function send(string $name, \stdClass $from, \stdClass $to, string $subject,
-            string $body, \moodle_url $url): void {
-        $message = new \core\message\message();
+    private static function send(string $name, stdClass $from, stdClass $to, string $subject,
+                                 string $body, moodle_url $url): void {
+        $message = new message();
         $message->component = 'mod_videodebate';
         $message->name = $name;
         $message->userfrom = $from;
@@ -111,7 +116,7 @@ class notification_manager {
         $message->subject = $subject;
         $message->fullmessage = $body;
         $message->fullmessageformat = FORMAT_PLAIN;
-        $message->fullmessagehtml = \html_writer::tag('p', s($body));
+        $message->fullmessagehtml = html_writer::tag('p', s($body));
         $message->smallmessage = $body;
         $message->notification = 1;
         $message->contexturl = $url->out(false);

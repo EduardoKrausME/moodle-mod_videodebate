@@ -16,10 +16,13 @@
 
 namespace mod_videodebate\privacy;
 
+use context;
+use context_module;
 use core_privacy\local\metadata\collection;
 use core_privacy\local\request\approved_contextlist;
 use core_privacy\local\request\approved_userlist;
 use core_privacy\local\request\contextlist;
+use core_privacy\local\request\core_userlist_provider;
 use core_privacy\local\request\userlist;
 use core_privacy\local\request\writer;
 
@@ -33,7 +36,7 @@ use core_privacy\local\request\writer;
 class provider implements
     \core_privacy\local\metadata\provider,
     \core_privacy\local\request\plugin\provider,
-    \core_privacy\local\request\core_userlist_provider {
+    core_userlist_provider {
 
     /**
      * Describe stored personal data.
@@ -121,7 +124,7 @@ class provider implements
     public static function get_users_in_context(userlist $userlist): void {
         global $DB;
         $context = $userlist->get_context();
-        if (!$context instanceof \context_module) {
+        if (!$context instanceof context_module) {
             return;
         }
         $cm = get_coursemodule_from_id('videodebate', $context->instanceid, 0, false, IGNORE_MISSING);
@@ -164,7 +167,7 @@ class provider implements
         global $DB;
         $userid = $contextlist->get_user()->id;
         foreach ($contextlist->get_contexts() as $context) {
-            if (!$context instanceof \context_module) {
+            if (!$context instanceof context_module) {
                 continue;
             }
             $cm = get_coursemodule_from_id('videodebate', $context->instanceid, 0, false, IGNORE_MISSING);
@@ -207,11 +210,11 @@ class provider implements
     /**
      * Delete all user data in a context.
      *
-     * @param \context $context Context.
+     * @param context $context Context.
      * @return void
      */
-    public static function delete_data_for_all_users_in_context(\context $context): void {
-        if (!$context instanceof \context_module) {
+    public static function delete_data_for_all_users_in_context(context $context): void {
+        if (!$context instanceof context_module) {
             return;
         }
         $cm = get_coursemodule_from_id('videodebate', $context->instanceid, 0, false, IGNORE_MISSING);
@@ -229,7 +232,7 @@ class provider implements
     public static function delete_data_for_user(approved_contextlist $contextlist): void {
         $userid = $contextlist->get_user()->id;
         foreach ($contextlist->get_contexts() as $context) {
-            if (!$context instanceof \context_module) {
+            if (!$context instanceof context_module) {
                 continue;
             }
             $cm = get_coursemodule_from_id('videodebate', $context->instanceid, 0, false, IGNORE_MISSING);
@@ -247,7 +250,7 @@ class provider implements
      */
     public static function delete_data_for_users(approved_userlist $userlist): void {
         $context = $userlist->get_context();
-        if (!$context instanceof \context_module) {
+        if (!$context instanceof context_module) {
             return;
         }
         $cm = get_coursemodule_from_id('videodebate', $context->instanceid, 0, false, IGNORE_MISSING);

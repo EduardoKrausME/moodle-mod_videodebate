@@ -200,7 +200,7 @@ if ($showothers) {
         }
     }
 
-    $builditem = static function($post, bool $isreply = false) use (
+    $builditem = static function ($post, bool $isreply = false) use (
         $OUTPUT,
         $USER,
         $cm,

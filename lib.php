@@ -375,11 +375,11 @@ function videodebate_recalculate_grades(stdClass $activity): void {
     $records = $DB->get_records('videodebate_grades', ['videodebateid' => $activity->id]);
     foreach ($records as $record) {
         $score = (
-            ((float)$record->argumentation * (int)$activity->weightargument)
-            + ((float)$record->evidence * (int)$activity->weightevidence)
-            + ((float)$record->participation * (int)$activity->weightparticipation)
-            + ((float)$record->replies * (int)$activity->weightreplies)
-        ) / 100;
+                ((float)$record->argumentation * (int)$activity->weightargument)
+                + ((float)$record->evidence * (int)$activity->weightevidence)
+                + ((float)$record->participation * (int)$activity->weightparticipation)
+                + ((float)$record->replies * (int)$activity->weightreplies)
+            ) / 100;
         $record->finalgrade = $score * ((float)$activity->grade / 100);
         $record->timemodified = time();
         $DB->update_record('videodebate_grades', $record);

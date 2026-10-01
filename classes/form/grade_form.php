@@ -15,8 +15,10 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 namespace mod_videodebate\form;
-defined('MOODLE_INTERNAL') || die();
+use moodleform;
 global $CFG;
+defined('MOODLE_INTERNAL') || die;
+
 require_once("{$CFG->libdir}/formslib.php");
 
 /**
@@ -26,7 +28,7 @@ require_once("{$CFG->libdir}/formslib.php");
  * @copyright 2026 Eduardo Kraus {@link https://eduardokraus.com}
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-class grade_form extends \moodleform {
+class grade_form extends moodleform {
     /**
      * Method definition.
      *

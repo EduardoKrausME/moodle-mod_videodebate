@@ -15,6 +15,9 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 namespace mod_videodebate\completion;
+use core_completion\activity_custom_completion;
+use mod_videodebate\debate_manager;
+
 /**
  * Custom completion rules.
  *
@@ -22,7 +25,7 @@ namespace mod_videodebate\completion;
  * @copyright 2026 Eduardo Kraus {@link https://eduardokraus.com}
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-class custom_completion extends \core_completion\activity_custom_completion {
+class custom_completion extends activity_custom_completion {
     /**
      * Method get_state.
      *
@@ -39,11 +42,11 @@ class custom_completion extends \core_completion\activity_custom_completion {
             (float)$progress->percent >= (float)$activity->completionpercent ? COMPLETION_COMPLETE : COMPLETION_INCOMPLETE;
         }
         if ($rule === 'completionpost') {
-            return !$activity->completionpost || \mod_videodebate\debate_manager::get_initial_post($activity->id, $this->userid)
+            return !$activity->completionpost || debate_manager::get_initial_post($activity->id, $this->userid)
                 ? COMPLETION_COMPLETE : COMPLETION_INCOMPLETE;
         }
         if ($rule === 'completionreplies') {
-            return \mod_videodebate\debate_manager::reply_count($activity->id, $this->userid) >= (int)$activity->completionreplies
+            return debate_manager::reply_count($activity->id, $this->userid) >= (int)$activity->completionreplies
                 ? COMPLETION_COMPLETE : COMPLETION_INCOMPLETE;
         }
         return COMPLETION_INCOMPLETE;

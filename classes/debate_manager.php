@@ -15,6 +15,14 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 namespace mod_videodebate;
+use context_module;
+use core_text;
+use mod_videodebate\event\post_created;
+use mod_videodebate\event\reply_created;
+use moodle_exception;
+use required_capability_exception;
+use stdClass;
+
 /**
  * Debate domain service.
  *
@@ -37,7 +45,7 @@ class debate_manager {
             if ($label === '') {
                 continue;
             }
-            $key = substr(sha1(\core_text::strtolower($label)), 0, 20);
+            $key = substr(sha1(core_text::strtolower($label)), 0, 20);
             $positions[$key] = $label;
         }
         return $positions;
@@ -73,22 +81,22 @@ class debate_manager {
     /**
      * Method get_positions.
      *
-     * @param \stdClass $activity Parameter activity.
+     * @param stdClass $activity Parameter activity.
      * @return array Return value.
      */
-    public static function get_positions(\stdClass $activity): array {
+    public static function get_positions(stdClass $activity): array {
         return self::positions_from_text((string)$activity->positions);
     }
 
     /**
      * Method assigned_position.
      *
-     * @param \stdClass $activity Parameter activity.
+     * @param stdClass $activity Parameter activity.
      * @param int $userid Parameter userid.
      * @param int $groupid Parameter groupid.
      * @return string Return value.
      */
-    public static function assigned_position(\stdClass $activity, int $userid, int $groupid = 0): string {
+    public static function assigned_position(stdClass $activity, int $userid, int $groupid = 0): string {
         $positions = self::get_positions($activity);
         if (!$positions) {
             return '';
@@ -99,7 +107,7 @@ class debate_manager {
             $index = abs((int)crc32($activity->id . ':' . $groupid . ':' . $userid)) % count($keys);
             return $keys[$index];
         }
-        $context = \context_module::instance($cm->id);
+        $context = context_module::instance($cm->id);
         $users = get_enrolled_users($context, 'mod/videodebate:participate', 0, 'u.id', 'u.id ASC');
         $userids = array_map('intval', array_keys($users));
         if ($groupid > 0) {
@@ -120,9 +128,9 @@ class debate_manager {
      *
      * @param int $activityid Parameter activityid.
      * @param int $userid Parameter userid.
-     * @return ?\stdClass Return value.
+     * @return ?stdClass Return value.
      */
-    public static function get_initial_post(int $activityid, int $userid): ?\stdClass {
+    public static function get_initial_post(int $activityid, int $userid): ?stdClass {
         global $DB;
         return $DB->get_record('videodebate_posts', [
             'videodebateid' => $activityid,
@@ -166,7 +174,7 @@ class debate_manager {
     /**
      * Method save_post.
      *
-     * @param \stdClass $activity Parameter activity.
+     * @param stdClass $activity Parameter activity.
      * @param int $userid Parameter userid.
      * @param int $groupid Parameter groupid.
      * @param int $parentid Parameter parentid.
@@ -175,20 +183,20 @@ class debate_manager {
      * @param array $evidence Parameter evidence.
      * @return int Return value.
      */
-    public static function save_post(\stdClass $activity, int $userid, int $groupid, int $parentid,
-                                     string $positionkey, string $message, array $evidence): int {
+    public static function save_post(stdClass $activity, int $userid, int $groupid, int $parentid,
+                                     string   $positionkey, string $message, array $evidence): int {
         global $DB;
         $now = time();
         $cm = get_coursemodule_from_instance('videodebate', $activity->id, $activity->course, false, MUST_EXIST);
-        $context = \context_module::instance($cm->id);
+        $context = context_module::instance($cm->id);
         if ($parentid === 0 && !has_capability('mod/videodebate:participate', $context, $userid)) {
-            throw new \required_capability_exception($context, 'mod/videodebate:participate', 'nopermissions', '');
+            throw new required_capability_exception($context, 'mod/videodebate:participate', 'nopermissions', '');
         }
         if ($parentid !== 0 && !has_capability('mod/videodebate:reply', $context, $userid)) {
-            throw new \required_capability_exception($context, 'mod/videodebate:reply', 'nopermissions', '');
+            throw new required_capability_exception($context, 'mod/videodebate:reply', 'nopermissions', '');
         }
         if ($parentid === 0 && self::get_initial_post($activity->id, $userid)) {
-            throw new \moodle_exception('initialpostexists', 'videodebate');
+            throw new moodle_exception('initialpostexists', 'videodebate');
         }
         if ($parentid !== 0) {
             $parent = $DB->get_record('videodebate_posts', [
@@ -196,22 +204,22 @@ class debate_manager {
                 'videodebateid' => $activity->id,
             ], '*', MUST_EXIST);
             if ((int)$parent->userid === $userid) {
-                throw new \moodle_exception('cannotreplyself', 'videodebate');
+                throw new moodle_exception('cannotreplyself', 'videodebate');
             }
             if (!empty($parent->isreply) || (int)$parent->parentid !== 0) {
-                throw new \moodle_exception('nestedreplynotallowed', 'videodebate');
+                throw new moodle_exception('nestedreplynotallowed', 'videodebate');
             }
             if (!empty($parent->hidden)) {
-                throw new \moodle_exception('replytargethidden', 'videodebate');
+                throw new moodle_exception('replytargethidden', 'videodebate');
             }
             if (!empty($activity->blinduntilpost) && !self::get_initial_post($activity->id, $userid)
-                    && !has_capability('mod/videodebate:viewall', $context, $userid)) {
-                throw new \moodle_exception('publishbeforeview', 'videodebate');
+                && !has_capability('mod/videodebate:viewall', $context, $userid)) {
+                throw new moodle_exception('publishbeforeview', 'videodebate');
             }
             if ((int)$parent->groupid > 0
-                    && !groups_is_member((int)$parent->groupid, $userid)
-                    && !has_capability('moodle/site:accessallgroups', $context, $userid)) {
-                throw new \moodle_exception('cannotreplygroup', 'videodebate');
+                && !groups_is_member((int)$parent->groupid, $userid)
+                && !has_capability('moodle/site:accessallgroups', $context, $userid)) {
+                throw new moodle_exception('cannotreplygroup', 'videodebate');
             }
             $positionkey = '';
         }
@@ -220,10 +228,10 @@ class debate_manager {
         }
         $positions = self::get_positions($activity);
         if ($parentid === 0 && !isset($positions[$positionkey])) {
-            throw new \moodle_exception('invalidposition', 'videodebate');
+            throw new moodle_exception('invalidposition', 'videodebate');
         }
         if ($parentid === 0 && count($evidence) < (int)$activity->minevidence) {
-            throw new \moodle_exception('notenoughevidence', 'videodebate', '', $activity->minevidence);
+            throw new moodle_exception('notenoughevidence', 'videodebate', '', $activity->minevidence);
         }
         $positionlabel = $parentid === 0 ? (string)($positions[$positionkey] ?? '') : '';
         $post = (object)[
@@ -263,8 +271,8 @@ class debate_manager {
         $transaction->allow_commit();
 
         $eventclass = $parentid === 0
-            ? \mod_videodebate\event\post_created::class
-            : \mod_videodebate\event\reply_created::class;
+            ? post_created::class
+            : reply_created::class;
         $event = $eventclass::create([
             'objectid' => $postid,
             'context' => $context,
@@ -275,7 +283,7 @@ class debate_manager {
         $event->trigger();
 
         if ($parentid !== 0) {
-            \mod_videodebate\notification_manager::notify_reply($activity, $cm, $postid, $parent, $userid);
+            notification_manager::notify_reply($activity, $cm, $postid, $parent, $userid);
         }
         return $postid;
     }

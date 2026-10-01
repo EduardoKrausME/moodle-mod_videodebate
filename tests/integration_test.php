@@ -16,10 +16,16 @@
 
 namespace mod_videodebate;
 
+use advanced_testcase;
+use backup;
+use backup_controller;
+use context_module;
 use core_privacy\local\request\approved_contextlist;
 use mod_videodebate\completion\custom_completion;
 use mod_videodebate\external\update_progress;
 use mod_videodebate\privacy\provider;
+use moodle_exception;
+use restore_controller;
 
 /**
  * Integration tests for Video Debate.
@@ -33,7 +39,7 @@ use mod_videodebate\privacy\provider;
  * @copyright 2026 Eduardo Kraus {@link https://eduardokraus.com}
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-final class integration_test extends \advanced_testcase {
+final class integration_test extends advanced_testcase {
     /**
      * Create a course, activity and three enrolled students.
      *
@@ -54,7 +60,7 @@ final class integration_test extends \advanced_testcase {
         $module = $generator->get_plugin_generator('mod_videodebate')->create_instance($activitydata);
         $activity = $DB->get_record('videodebate', ['id' => $module->id], '*', MUST_EXIST);
         $cm = get_coursemodule_from_instance('videodebate', $activity->id, $course->id, false, MUST_EXIST);
-        $context = \context_module::instance($cm->id);
+        $context = context_module::instance($cm->id);
         return [$course, $activity, $cm, $context, $users];
     }
 
@@ -87,7 +93,7 @@ final class integration_test extends \advanced_testcase {
         $this->assertSame('Agree', $post->positionlabel);
 
         $replyid = debate_manager::save_post($activity, $user2->id, 0, $postid, '', 'Reply', []);
-        $this->expectException(\moodle_exception::class);
+        $this->expectException(moodle_exception::class);
         $this->expectExceptionMessage(get_string('nestedreplynotallowed', 'videodebate'));
         debate_manager::save_post($activity, $user3->id, 0, $replyid, '', 'Nested reply', []);
     }
@@ -101,7 +107,7 @@ final class integration_test extends \advanced_testcase {
         $positionkey = array_key_first(debate_manager::get_positions($activity));
         $postid = debate_manager::save_post($activity, $user1->id, 0, 0, $positionkey, 'Initial', []);
 
-        $this->expectException(\moodle_exception::class);
+        $this->expectException(moodle_exception::class);
         $this->expectExceptionMessage(get_string('publishbeforeview', 'videodebate'));
         debate_manager::save_post($activity, $user2->id, 0, $postid, '', 'Attempted reply', []);
     }
@@ -117,7 +123,7 @@ final class integration_test extends \advanced_testcase {
         $positionkey = array_key_first(debate_manager::get_positions($activity));
         $postid = debate_manager::save_post($activity, $user1->id, $group->id, 0, $positionkey, 'Grouped', []);
 
-        $this->expectException(\moodle_exception::class);
+        $this->expectException(moodle_exception::class);
         $this->expectExceptionMessage(get_string('cannotreplygroup', 'videodebate'));
         debate_manager::save_post($activity, $user2->id, 0, $postid, '', 'Wrong group', []);
     }
@@ -283,25 +289,25 @@ final class integration_test extends \advanced_testcase {
             'captionlang' => 'pt-BR',
         ]);
 
-        $bc = new \backup_controller(
-            \backup::TYPE_1ACTIVITY,
+        $bc = new backup_controller(
+            backup::TYPE_1ACTIVITY,
             $module->cmid,
-            \backup::FORMAT_MOODLE,
-            \backup::INTERACTIVE_NO,
-            \backup::MODE_IMPORT,
+            backup::FORMAT_MOODLE,
+            backup::INTERACTIVE_NO,
+            backup::MODE_IMPORT,
             $USER->id
         );
         $backupid = $bc->get_backupid();
         $bc->execute_plan();
         $bc->destroy();
 
-        $rc = new \restore_controller(
+        $rc = new restore_controller(
             $backupid,
             $course2->id,
-            \backup::INTERACTIVE_NO,
-            \backup::MODE_IMPORT,
+            backup::INTERACTIVE_NO,
+            backup::MODE_IMPORT,
             $USER->id,
-            \backup::TARGET_CURRENT_ADDING
+            backup::TARGET_CURRENT_ADDING
         );
         $rc->execute_precheck();
         $rc->execute_plan();

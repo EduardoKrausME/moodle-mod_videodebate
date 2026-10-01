@@ -16,6 +16,8 @@
 
 namespace mod_videodebate;
 
+use advanced_testcase;
+
 /**
  * Tests for watched segment merging.
  *
@@ -24,7 +26,7 @@ namespace mod_videodebate;
  * @copyright 2026 Eduardo Kraus {@link https://eduardokraus.com}
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-final class tracking_manager_test extends \advanced_testcase {
+final class tracking_manager_test extends advanced_testcase {
     /**
      * Method test_merge_segments_merges_overlaps_and_clamps_duration.
      *

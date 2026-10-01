@@ -16,6 +16,7 @@
 
 namespace mod_videodebate\external;
 
+use context_module;
 use core_external\external_api;
 use core_external\external_function_parameters;
 use core_external\external_single_structure;
@@ -57,7 +58,7 @@ class update_progress extends external_api {
      * @param float $playbackrate Parameter playbackrate.
      * @return array Return value.
      */
-    public static function execute(int $cmid, float $currentposition, float $duration,
+    public static function execute(int   $cmid, float $currentposition, float $duration,
                                    float $segmentstart, float $segmentend, float $playbackrate): array {
         global $DB, $USER;
         $params = self::validate_parameters(self::execute_parameters(), [
@@ -69,7 +70,7 @@ class update_progress extends external_api {
             'playbackrate' => $playbackrate,
         ]);
         $cm = get_coursemodule_from_id('videodebate', $params['cmid'], 0, false, MUST_EXIST);
-        $context = \context_module::instance($cm->id);
+        $context = context_module::instance($cm->id);
         self::validate_context($context);
         require_capability('mod/videodebate:view', $context);
         $activity = $DB->get_record('videodebate', ['id' => $cm->instance], '*', MUST_EXIST);

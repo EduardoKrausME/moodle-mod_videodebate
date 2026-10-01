@@ -15,8 +15,11 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 namespace mod_videodebate\form;
-defined('MOODLE_INTERNAL') || die();
+use html_writer;
+use moodleform;
 global $CFG;
+defined('MOODLE_INTERNAL') || die;
+
 require_once("{$CFG->libdir}/formslib.php");
 
 /**
@@ -26,7 +29,7 @@ require_once("{$CFG->libdir}/formslib.php");
  * @copyright 2026 Eduardo Kraus {@link https://eduardokraus.com}
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-class post_form extends \moodleform {
+class post_form extends moodleform {
     /**
      * Method definition.
      *
@@ -60,7 +63,7 @@ class post_form extends \moodleform {
         $mform->addRule('message', null, 'required', null, 'client');
         $mform->addElement('hidden', 'evidencejson', '[]');
         $mform->setType('evidencejson', PARAM_RAW);
-        $mform->addElement('html', \html_writer::div('', 'videodebate-evidence-form', ['data-region' => 'evidence-form']));
+        $mform->addElement('html', html_writer::div('', 'videodebate-evidence-form', ['data-region' => 'evidence-form']));
         $mform->addElement('submit', 'submitbutton', (int)$custom['parentid'] === 0
             ? get_string('publishargument', 'videodebate') : get_string('publishreply', 'videodebate'));
     }
