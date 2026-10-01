@@ -58,7 +58,7 @@ class update_progress extends external_api {
      * @param float $playbackrate Parameter playbackrate.
      * @return array Return value.
      */
-    public static function execute(int   $cmid, float $currentposition, float $duration,
+    public static function execute(int $cmid, float $currentposition, float $duration,
                                    float $segmentstart, float $segmentend, float $playbackrate): array {
         global $DB, $USER;
         $params = self::validate_parameters(self::execute_parameters(), [

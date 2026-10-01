@@ -184,7 +184,7 @@ class debate_manager {
      * @return int Return value.
      */
     public static function save_post(stdClass $activity, int $userid, int $groupid, int $parentid,
-                                     string   $positionkey, string $message, array $evidence): int {
+                                     string $positionkey, string $message, array $evidence): int {
         global $DB;
         $now = time();
         $cm = get_coursemodule_from_instance('videodebate', $activity->id, $activity->course, false, MUST_EXIST);

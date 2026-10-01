@@ -40,7 +40,7 @@ class tracking_manager {
      * @return stdClass Return value.
      */
     public function update(stdClass $activity, int $userid, float $current, float $duration,
-                           float    $start, float $end, float $rate): stdClass {
+                           float $start, float $end, float $rate): stdClass {
         global $DB;
         $record = $DB->get_record('videodebate_progress', [
             'videodebateid' => $activity->id,
