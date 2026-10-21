@@ -72,7 +72,7 @@ function xmldb_videodebate_upgrade(int $oldversion): bool {
             foreach ($lines as $line) {
                 $label = trim($line);
                 if ($label !== '') {
-                    $labels[substr(sha1(core_text::strtolower($label)), 0, 20)] = $label;
+                    $labels[substr(sha1(strtolower($label)), 0, 20)] = $label;
                 }
             }
             foreach ($labels as $key => $label) {

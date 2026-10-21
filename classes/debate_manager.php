@@ -16,7 +16,6 @@
 
 namespace mod_videodebate;
 use context_module;
-use core_text;
 use mod_videodebate\event\post_created;
 use mod_videodebate\event\reply_created;
 use moodle_exception;
@@ -45,7 +44,7 @@ class debate_manager {
             if ($label === '') {
                 continue;
             }
-            $key = substr(sha1(core_text::strtolower($label)), 0, 20);
+            $key = substr(sha1(strtolower($label)), 0, 20);
             $positions[$key] = $label;
         }
         return $positions;
